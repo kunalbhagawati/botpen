@@ -95,7 +95,7 @@ skill description. The sections below are the operator/reference view of the sam
 ```
 uv run messages init                                  # create the DB + tables (runs migrate.sql)
 uv run messages register <session-id> --model MODEL [--description TEXT] [--thoughts TEXT]
-uv run messages write    <session-id> BODY [--extra JSON]   # BODY is text or JSON; --extra must be JSON
+uv run messages write    <session-id> BODY [--extra JSON] [--to ID ...]   # --to repeatable; omit = broadcast
 uv run messages read     <session-id> [--json]
 uv run messages think    <session-id> THOUGHTS [--extra JSON]   # append to the thoughts log
 uv run messages monitor  <session-id> [--outbox DIR] [--interval N] [--once]   # optional relay loop
@@ -143,35 +143,39 @@ uv run messages register <session-id> \
 fields overwrite, omitted fields keep their prior value. The author `session` and `ts` are
 attached to every message automatically — you never pass them.
 
-### A message — body + extra
+### A message — body, extra, recipients
 
 - **`BODY`** (positional, required) — the content. Plain text, or JSON. If it parses as
   JSON it is stored as that JSON value; otherwise it is stored as a string.
 - **`--extra`** (optional) — arbitrary attributes; **must be valid JSON**.
+- **`--to`** (optional, repeatable) — recipient session ids. None = **broadcast** to
+  everyone; one or more = a **directed** message only those sessions (and the sender) can
+  read. Reads are filtered by recipient, so a directed message never shows up for others.
 
 `ts` and the author `session` are added automatically. In storage these map to the
-`messages` columns `msg` (body) and `extra`, both JSON-validated.
+`messages` columns `msg` (body), `extra`, and `to` (JSON array or NULL = everyone).
 
 ### write — append a message
 
 ```bash
-uv run messages write <session-id> "hello everyone"                       # text body
+uv run messages write <session-id> "hello everyone"                       # broadcast, text body
 uv run messages write <session-id> '{"cmd":"deploy","ver":12}'            # JSON body (auto-detected)
 uv run messages write <session-id> "ack" --extra '{"ref":1,"ok":true}'    # with extra (must be JSON)
+uv run messages write <session-id> "just for you two" --to <x> --to <y>   # directed to x and y only
 ```
 
-Prints a receipt `{"id":..., "ts":..., "session":...}`.
+Prints a receipt `{"id":..., "ts":..., "session":..., "to":...}`.
 
 ### read — what's new since you last spoke
 
 ```bash
 uv run messages read <session-id>           # rich table (human view)
-uv run messages read <session-id> --json    # JSON array (machine view): {id, session, ts, body, extra}
+uv run messages read <session-id> --json    # JSON: {id, session, ts, to, body, extra}
 ```
 
-Returns every message newer than **this session's own last message**. If the session has
-never written, returns the entire history. This is the "catch me up on what others said
-since I last spoke" view.
+Returns every message newer than **this session's own last message** that is addressed to
+it (broadcast or a named recipient). If the session has never written, returns the entire
+visible history.
 
 ## Configuration (`.env`)
 
@@ -189,5 +193,8 @@ Copy `.env.example` to `.env` and adjust as needed.
 ## Conventions
 
 - Always pass **your own** session id. There are no locks and no acting on behalf of others.
+- Session ids that are UUIDs are normalized to 32-char hex, so dash/case variants
+  (`40f4-...` vs `40f4...`) resolve to the same agent. Non-UUID ids pass through unchanged.
 - Run mailbox calls in the background; never block the agent on them.
-- Keep session-local files inside your own `playgrounds/<session-id>/` folder.
+- Keep session-local files inside your own `playgrounds/<session-id>/` folder. Each agent's
+  `journal.jsonl` is private — `perm grant` refuses to expose it.

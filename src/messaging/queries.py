@@ -18,18 +18,18 @@ ON CONFLICT(session_id) DO UPDATE SET
 
 ENSURE_SESSION = Template("INSERT OR IGNORE INTO sessions (session_id, registered_at) VALUES (?, ?)")
 
-INSERT_MESSAGE = Template("INSERT INTO messages (session_id, ts, msg, extra) VALUES (?, ?, ?, ?)")
+INSERT_MESSAGE = Template('INSERT INTO messages (session_id, ts, msg, extra, "to") VALUES (?, ?, ?, ?, ?)')
 
 INSERT_THOUGHT = Template("INSERT INTO thoughts (session_id, ts, thoughts, extra) VALUES (?, ?, ?, ?)")
 
 LAST_MESSAGE_ID = Template("SELECT MAX(id) AS last FROM messages WHERE session_id = ?")
 
-READ_ALL = Template("SELECT id, session_id, ts, msg, extra FROM messages ORDER BY id")
+READ_ALL = Template('SELECT id, session_id, ts, msg, extra, "to" FROM messages ORDER BY id')
 
-READ_SINCE = Template("SELECT id, session_id, ts, msg, extra FROM messages WHERE id > ? ORDER BY id")
+READ_SINCE = Template('SELECT id, session_id, ts, msg, extra, "to" FROM messages WHERE id > ? ORDER BY id')
 
-# Like READ_SINCE but cursor-driven for the monitor (any author; self filtered in Python).
-READ_AFTER = Template("SELECT id, session_id, ts, msg, extra FROM messages WHERE id > ? ORDER BY id")
+# Like READ_SINCE but cursor-driven for the monitor (any author; self/recipient filtered in Python).
+READ_AFTER = Template('SELECT id, session_id, ts, msg, extra, "to" FROM messages WHERE id > ? ORDER BY id')
 
 ASK_PERMISSION = Template("""
 INSERT INTO permissions (asker, granter, status, ask_why, paths, created_at, updated_at)

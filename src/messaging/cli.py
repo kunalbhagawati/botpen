@@ -98,10 +98,16 @@ def _parse_extra(extra: str | None):
 @click.argument("session_id")
 @click.argument("body")
 @click.option("--extra", help="optional attributes; MUST be valid JSON")
-def write(session_id: str, body: str, extra: str | None) -> None:
-    """Append a message authored by SESSION_ID. BODY is text or JSON."""
-    message_id, ts = db.write_message(_connect(), session_id, _coerce_body(body), _parse_extra(extra))
-    click.echo(json.dumps({"id": message_id, "ts": ts, "session": session_id}))
+@click.option("--to", "to_", multiple=True, help="recipient session id; repeat for several; omit = everyone")
+def write(session_id: str, body: str, extra: str | None, to_: tuple[str, ...]) -> None:
+    """Append a message authored by SESSION_ID. BODY is text or JSON.
+
+    With no --to the message is a broadcast (everyone). Pass --to one or more times to
+    address specific sessions; only they (and you) will see it.
+    """
+    to = list(to_) or None
+    message_id, ts = db.write_message(_connect(), session_id, _coerce_body(body), _parse_extra(extra), to)
+    click.echo(json.dumps({"id": message_id, "ts": ts, "session": session_id, "to": to}))
 
 
 @main.command()
@@ -134,11 +140,13 @@ def read(session_id: str, as_json: bool) -> None:
     table.add_column("id", justify="right", style="cyan", no_wrap=True)
     table.add_column("ts", style="green", no_wrap=True)
     table.add_column("session", style="magenta")
+    table.add_column("to", style="blue")
     table.add_column("body")
     table.add_column("extra", style="yellow")
     for r in rows:
         extra = json.dumps(r["extra"], ensure_ascii=False) if r["extra"] is not None else ""
-        table.add_row(str(r["id"]), r["ts"], r["session"], _render_body(r["body"]), extra)
+        to = ", ".join(r["to"]) if r["to"] else "all"
+        table.add_row(str(r["id"]), r["ts"], r["session"], to, _render_body(r["body"]), extra)
     _console.print(table)
 
 
@@ -173,6 +181,7 @@ def monitor(session_id: str, interval: float, state: str | None, outbox: str | N
     emits one JSON line per event to stdout, e.g. {"event":"incoming", id, session, ts, body, extra}.
     """
     conn = _connect()
+    session_id = db.normalize_session(session_id)
     state_path = Path(state) if state else Path.cwd() / f".messages-monitor-{session_id}.cursor"
     perm_state_path = Path(str(state_path) + ".perm")
 
@@ -195,8 +204,9 @@ def monitor(session_id: str, interval: float, state: str | None, outbox: str | N
 
         fresh = db.read_after(conn, cursor, exclude_session=session_id)
         for r in fresh:
-            click.echo(json.dumps({"event": "incoming", **r}, ensure_ascii=False))
             cursor = max(cursor, r["id"])
+            if db.visible_to(r, session_id):  # broadcast, or I'm a named recipient
+                click.echo(json.dumps({"event": "incoming", **r}, ensure_ascii=False))
         if fresh:
             state_path.write_text(str(cursor))
 
@@ -248,7 +258,10 @@ def perm_grant(session_id: str, asker: str, paths: str, why: str | None) -> None
         raise click.ClickException(f"--paths must be valid JSON (an array of strings): {e}") from e
     if not isinstance(paths_val, list):
         raise click.ClickException("--paths must be a JSON array of strings/globs")
-    db.grant_permission(_connect(), session_id, asker, paths_val, why)
+    try:
+        db.grant_permission(_connect(), session_id, asker, paths_val, why)
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
     click.echo(json.dumps({"event": "granted", "granter": session_id, "asker": asker, "paths": paths_val}))
 
 

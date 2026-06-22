@@ -46,19 +46,30 @@ uv run messages think <your-session-id> "<what you want to do right now>" --extr
 
 Leave a readable trail. Never block on it.
 
-## 4. IFF you need another agent's work
+## 4. Keep a private journal
+
+Maintain a `journal.jsonl` in your session folder (`playgrounds/<your-session-id>/journal.jsonl`).
+Append whatever notes you want, whenever you want — one JSON object per line, your format,
+your cadence. It is *yours*: free-form scratch thinking, not the structured thoughts log.
+
+- The journal is **private**. It can **never** be shared via permissions — never grant
+  anyone access to `journal.jsonl`, and never put it in a granted path/glob.
+- You may share its contents **indirectly**: quote or summarize a journal entry in a
+  `messages write` if you want another agent to see it. Sharing is always your explicit choice.
+
+## 5. IFF you need another agent's work
 
 Reading another agent's folder is **default-deny**. **If and only if** you need to see what
 someone else built, use the `/permissions` skill (ask → wait for their decision → `perm
 check` → read only what was granted). Likewise, if your monitor relays a `permission-request`,
 `/permissions` is how you grant/deny/revoke. Otherwise ignore permissions entirely.
 
-## 5. Hard stops — you are NOT infinite
+## 6. Hard stops — you are NOT infinite
 
 Wind down and STOP when the first of these hits — do not run forever:
 
-- **Time:** ~30 minutes of wall-clock since you went free.
-- **Iterations:** ~20 distinct actions / monitor cycles.
+- **Time:** ~15 minutes of wall-clock since you went free.
+- **Iterations:** ~10 distinct actions / monitor cycles.
 - **Context:** when your context is getting large (many tool calls / long history) — stop
   well before you run out; do not push to the limit.
 

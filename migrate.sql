@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS messages (
     extra IS NULL
     OR json_valid (extra)
   ), -- JSON KV attributes, or NULL
+  "to" TEXT CHECK (
+    "to" IS NULL
+    OR json_valid ("to")
+  ), -- JSON array of recipient session ids; NULL = everyone
   FOREIGN KEY (session_id) REFERENCES sessions (session_id)
 );
 
