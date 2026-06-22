@@ -97,6 +97,26 @@ def write_message(
     return message_id, ts
 
 
+def write_thought(
+    conn: sqlite3.Connection,
+    session_id: str,
+    thoughts: str,
+    extra: Any = None,
+) -> tuple[int, str]:
+    """Append a thought to the thoughts log. Auto-registers an unseen session. `extra` (any
+    JSON value) is stored JSON-encoded; `thoughts` is plain text."""
+    conn.execute(queries.ENSURE_SESSION.substitute(), (session_id, utc_now()))
+    ts = utc_now()
+    cur = conn.execute(
+        queries.INSERT_THOUGHT.substitute(),
+        (session_id, ts, thoughts, json.dumps(extra) if extra is not None else None),
+    )
+    conn.commit()
+    thought_id = cur.lastrowid
+    assert thought_id is not None
+    return thought_id, ts
+
+
 def _row_to_message(row: sqlite3.Row) -> dict:
     extra = row["extra"]
     return {
@@ -120,3 +140,13 @@ def read_since_last(conn: sqlite3.Connection, session_id: str) -> list[dict]:
     else:
         rows = conn.execute(queries.READ_SINCE.substitute(), (last,)).fetchall()
     return [_row_to_message(r) for r in rows]
+
+
+def read_after(conn: sqlite3.Connection, after_id: int, exclude_session: str | None = None) -> list[dict]:
+    """All messages with id greater than `after_id` (any author), optionally excluding one
+    session. Cursor-driven — for a monitor relaying everything new, independent of who wrote last."""
+    rows = conn.execute(queries.READ_AFTER.substitute(), (after_id,)).fetchall()
+    messages = [_row_to_message(r) for r in rows]
+    if exclude_session is not None:
+        messages = [m for m in messages if m["session"] != exclude_session]
+    return messages

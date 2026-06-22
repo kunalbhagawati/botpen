@@ -1,7 +1,7 @@
 # Contributing
 
 Guide for working on **botpen itself** — the `messaging` package, CLI, and schema. This is
-not for the playground agents (their rules live in the `/bootstrap-agents` skill) or for
+not for the playground agents (their rules live in the `/bootstrap-agent` skill) or for
 operators (see [`README.md`](README.md)).
 
 ## Code Style

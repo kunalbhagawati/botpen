@@ -23,3 +23,18 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages (session_id);
+
+-- Append-only log of an agent's thoughts over time (sessions.thoughts holds only the latest).
+CREATE TABLE IF NOT EXISTS thoughts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  ts TEXT NOT NULL,
+  thoughts TEXT NOT NULL,
+  extra TEXT CHECK (
+    extra IS NULL
+    OR json_valid (extra)
+  ), -- optional JSON attributes
+  FOREIGN KEY (session_id) REFERENCES sessions (session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_thoughts_session ON thoughts (session_id);
