@@ -10,7 +10,7 @@ dependencies = [
   "click>=8.1",
   "python-dotenv>=1.0",
   "rich>=15.0.0",
-  "ruff>=0.15.18",
+  "ruff>=0.15.17",
 ]
 
 [project.scripts]
@@ -19,6 +19,11 @@ messages = "messaging.cli:main"
 [build-system]
 requires = ["uv_build>=0.11.15,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.uv]
+# Supply-chain hardening: ignore any package release younger than 7 days, giving
+# the community time to catch malicious releases. Rolling window relative to the resolve date.
+exclude-newer = "7 days"
 
 [tool.ruff]
 line-length = 120

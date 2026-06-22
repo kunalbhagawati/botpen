@@ -7,14 +7,27 @@ each agent passes its own.
 
 from __future__ import annotations
 
+import json
+import os
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 import arrow
 
 
 def utc_now() -> str:
     return arrow.utcnow().format("YYYY-MM-DDTHH:mm:ss[Z]")
+
+
+def migrate_sql_path() -> Path:
+    """Locate migrate.sql (the schema). Honors MESSAGES_ROOT, else the project root."""
+    root = os.environ.get("MESSAGES_ROOT")
+    if root:
+        candidate = Path(root) / "migrate.sql"
+        if candidate.exists():
+            return candidate
+    return Path(__file__).resolve().parents[2] / "migrate.sql"
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -28,24 +41,7 @@ def connect(db_path: Path) -> sqlite3.Connection:
 
 
 def _init(conn: sqlite3.Connection) -> None:
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS sessions (
-            session_id    TEXT PRIMARY KEY,
-            registered_at TEXT NOT NULL,
-            other         TEXT,
-            telemetry     TEXT,
-            params        TEXT
-        );
-        CREATE TABLE IF NOT EXISTS messages (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT NOT NULL,
-            ts         TEXT NOT NULL,
-            msg        TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
-        """
-    )
+    conn.executescript(migrate_sql_path().read_text())
     conn.commit()
 
 
@@ -78,16 +74,26 @@ def register(
     conn.commit()
 
 
-def write_message(conn: sqlite3.Connection, session_id: str, msg: str) -> tuple[int, str]:
-    """Append a message. Auto-registers a bare session row if the sender is unseen."""
+def write_message(
+    conn: sqlite3.Connection,
+    session_id: str,
+    body: Any,
+    attrs: dict | None = None,
+) -> tuple[int, str]:
+    """Append one message (body + optional attrs). Auto-registers an unseen sender.
+
+    `body` may be any JSON value (a string, object, array, number, ...). It and
+    `attrs` are stored JSON-encoded and round-tripped back to their original types
+    on read.
+    """
     conn.execute(
         "INSERT OR IGNORE INTO sessions (session_id, registered_at) VALUES (?, ?)",
         (session_id, utc_now()),
     )
     ts = utc_now()
     cur = conn.execute(
-        "INSERT INTO messages (session_id, ts, msg) VALUES (?, ?, ?)",
-        (session_id, ts, msg),
+        "INSERT INTO messages (session_id, ts, msg, extra) VALUES (?, ?, ?, ?)",
+        (session_id, ts, json.dumps(body), json.dumps(attrs) if attrs is not None else None),
     )
     conn.commit()
     message_id = cur.lastrowid
@@ -95,22 +101,29 @@ def write_message(conn: sqlite3.Connection, session_id: str, msg: str) -> tuple[
     return message_id, ts
 
 
+def _row_to_message(row: sqlite3.Row) -> dict:
+    extra = row["extra"]
+    return {
+        "id": row["id"],
+        "session": row["session_id"],
+        "ts": row["ts"],
+        "body": json.loads(row["msg"]),
+        "attrs": json.loads(extra) if extra is not None else None,
+    }
+
+
 def read_since_last(conn: sqlite3.Connection, session_id: str) -> list[dict]:
     """All messages newer than this session's own last message.
 
     If the session has never written, return the entire history.
     """
-    row = conn.execute(
-        "SELECT MAX(id) AS last FROM messages WHERE session_id = ?", (session_id,)
-    ).fetchone()
+    row = conn.execute("SELECT MAX(id) AS last FROM messages WHERE session_id = ?", (session_id,)).fetchone()
     last = row["last"]
     if last is None:
-        rows = conn.execute(
-            "SELECT id, session_id, ts, msg FROM messages ORDER BY id"
-        ).fetchall()
+        rows = conn.execute("SELECT id, session_id, ts, msg, extra FROM messages ORDER BY id").fetchall()
     else:
         rows = conn.execute(
-            "SELECT id, session_id, ts, msg FROM messages WHERE id > ? ORDER BY id",
+            "SELECT id, session_id, ts, msg, extra FROM messages WHERE id > ? ORDER BY id",
             (last,),
         ).fetchall()
-    return [dict(r) for r in rows]
+    return [_row_to_message(r) for r in rows]

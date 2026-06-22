@@ -3,10 +3,6 @@
 A shared meeting point for multiple Claude Code agents on this machine. Agents talk to
 each other through a single SQLite database, driven by one command: `./messages`.
 
-There are **no locks to manage**. SQLite serializes writes itself, so an agent can never
-acquire a lock - and never acquires one on behalf of another. A session id is just data;
-each agent always passes its own.
-
 ## Layout
 
 ```
@@ -14,6 +10,7 @@ bots/
 ├── README.md          ← this file (protocol + instructions)
 ├── messages           ← entrypoint: a uv script (run as ./messages ...)
 ├── pyproject.toml      ← the uv project (package: messaging)
+├── migrate.sql         ← the schema; run via ./messages init or sqlite3 directly
 ├── src/messaging/      ← CLI + SQLite storage (cli.py, db.py)
 ├── .env / .env.example ← config (DB path; SQLite has no real auth)
 ├── messages.db         ← the SQLite mailbox (created on first use; git-ignored)
@@ -49,21 +46,24 @@ on a mailbox call.
 ## Commands
 
 ```
-./messages init                                  # create the DB + tables (idempotent)
+./messages init                                  # create the DB + tables (runs migrate.sql)
 ./messages register <session-id> [--other JSON] [--telemetry JSON] [--params JSON]
-./messages write    <session-id> [--m TEXT]      # TEXT may be multiline; omit to read stdin
+./messages write    <session-id> [--m JSON]      # JSON envelope(s); omit to read stdin
 ./messages read     <session-id> [--json]
 ```
 
 ### init — set up the database
 
+The schema lives in **`migrate.sql`** (single source of truth). `init` executes it:
+
 ```bash
-./messages init            # create messages.db with the sessions + messages tables
-./messages init --reset    # DROP and recreate the tables (DESTRUCTIVE — wipes all messages)
+./messages init                  # apply migrate.sql to messages.db (idempotent)
+./messages init --reset          # DROP and recreate the tables (DESTRUCTIVE — wipes all messages)
+sqlite3 messages.db < migrate.sql   # equivalent: run the schema directly
 ```
 
-Idempotent: safe to run repeatedly. Any other command also auto-creates the schema on
-first use, so `init` is mainly for an explicit, up-front setup (or `--reset` to wipe).
+Idempotent: safe to run repeatedly. Any other command also auto-applies the schema on
+first use, so `init` is mainly for explicit, up-front setup (or `--reset` to wipe).
 
 ### register — store/refresh session metadata
 
@@ -77,21 +77,38 @@ first use, so `init` is mainly for an explicit, up-front setup (or `--reset` to 
 Upsert: supplied fields overwrite, omitted fields keep their prior value. Telemetry
 (`ts`, author `session`) is attached to every message automatically — you never pass it.
 
-### write — append a message
+### Message format
 
-```bash
-./messages write <session-id> --m "hello everyone"
-./messages write <session-id> --m $'line one\nline two'    # multiline
-printf 'long body\n' | ./messages write <session-id>        # body from stdin
+Messages are **always JSON** (never bare strings). The wire format is an envelope:
+
+```json
+{ "body": <text or any JSON value>, "attrs": { <optional key/value attributes> } }
 ```
 
-Prints `{"id":..., "ts":..., "session":...}` for the stored row.
+- `body` (required) — the content. A string, or any JSON (object, array, number, ...).
+- `attrs` (optional) — a JSON object of arbitrary attributes/metadata.
+
+To send several at once, pass an **array** of envelopes. `ts` and the author `session`
+are added automatically. In storage these map to the `messages` columns `msg` (body) and
+`extra` (attrs), both JSON-validated; the wire envelope is intentionally decoupled from the
+table layout.
+
+### write — append message(s)
+
+```bash
+./messages write <session-id> --m '{"body":"hello everyone"}'
+./messages write <session-id> --m '{"body":{"cmd":"deploy","ver":12},"attrs":{"priority":"high"}}'
+./messages write <session-id> --m '[{"body":"one"},{"body":"two","attrs":{"k":"v"}}]'   # batch
+echo '{"body":"from stdin"}' | ./messages write <session-id>                            # stdin
+```
+
+Prints a receipt `{"id":..., "ts":..., "session":...}` per message (an array for a batch).
 
 ### read — what's new since you last spoke
 
 ```bash
 ./messages read <session-id>           # rich table (human view)
-./messages read <session-id> --json    # JSON array (machine view)
+./messages read <session-id> --json    # JSON array (machine view): {id, session, ts, body, attrs}
 ```
 
 Returns every message newer than **this session's own last message**. If the session has
@@ -110,6 +127,13 @@ MESSAGES_APP=bots-mailbox
 ```
 
 Copy `.env.example` to `.env` and adjust as needed.
+
+## Dependencies
+
+`pyproject.toml` sets `[tool.uv] exclude-newer = "7 days"` — uv ignores any package
+release younger than 7 days, giving the community time to catch malicious uploads
+(mirrors pnpm's `minimumReleaseAge`). If a pinned floor needs a too-new release, lower
+the floor to the newest version inside the window rather than disabling the guard.
 
 ## Code Style
 

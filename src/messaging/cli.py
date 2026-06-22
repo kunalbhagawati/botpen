@@ -1,8 +1,14 @@
 """click CLI for the SQLite-backed agent mailbox.
 
+Messages are always sent as JSON (never bare strings). The wire format is an
+envelope - one object, or an array of them for several messages at once:
+
+    {"body": <text or any JSON>, "attrs": {<optional kv>}}
+
 Commands:
+    messages init     [--reset]
     messages register <session-id> [--other ...] [--telemetry ...] [--params ...]
-    messages write    <session-id> [--m TEXT]      # TEXT may be multiline; omit to read stdin
+    messages write    <session-id> [--m JSON]      # one envelope or an array; omit to read stdin
     messages read     <session-id> [--json]
 """
 
@@ -53,9 +59,12 @@ def init(reset: bool) -> None:
     if reset:
         db.reset(conn)
         click.echo("reset: dropped and recreated tables")
-    tables = [r[0] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-    )]
+    tables = [
+        r[0]
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
+    ]
     click.echo(f"db ready at {db_path}")
     click.echo(f"tables: {', '.join(tables)}")
 
@@ -71,15 +80,55 @@ def register(session_id: str, other: str | None, telemetry: str | None, params: 
     click.echo(f"registered {session_id}")
 
 
+def _parse_messages(raw: str) -> tuple[list[dict], bool]:
+    """Parse the JSON wire payload into validated {body, attrs} messages.
+
+    Accepts a single envelope object or an array of them. Returns (messages, was_array).
+    """
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise click.ClickException(f"message must be valid JSON - an envelope object or an array of them: {e}") from e
+    was_array = isinstance(payload, list)
+    items = payload if was_array else [payload]
+    messages: list[dict] = []
+    for i, m in enumerate(items):
+        if not isinstance(m, dict):
+            raise click.ClickException(
+                f"message[{i}] must be a JSON object with a 'body' key (bare strings are not allowed)"
+            )
+        if "body" not in m:
+            raise click.ClickException(f"message[{i}] is missing the required 'body' key")
+        attrs = m.get("attrs")
+        if attrs is not None and not isinstance(attrs, dict):
+            raise click.ClickException(f"message[{i}].attrs must be a JSON object")
+        messages.append({"body": m["body"], "attrs": attrs})
+    return messages, was_array
+
+
 @main.command()
 @click.argument("session_id")
-@click.option("--m", "-m", "--message", "message", help="message body (single or multiline); omit to read stdin")
+@click.option(
+    "--m",
+    "-m",
+    "--message",
+    "message",
+    help='message(s) as JSON: {"body": <text|json>, "attrs": {...}} or an array of them; omit to read stdin',
+)
 def write(session_id: str, message: str | None) -> None:
-    """Append a message authored by SESSION_ID."""
-    body = message if message is not None else sys.stdin.read()
-    body = body.rstrip("\n")
-    message_id, ts = db.write_message(_connect(), session_id, body)
-    click.echo(json.dumps({"id": message_id, "ts": ts, "session": session_id}))
+    """Append one or more JSON messages authored by SESSION_ID."""
+    raw = message if message is not None else sys.stdin.read()
+    messages, was_array = _parse_messages(raw)
+    conn = _connect()
+    receipts = []
+    for m in messages:
+        message_id, ts = db.write_message(conn, session_id, m["body"], m["attrs"])
+        receipts.append({"id": message_id, "ts": ts, "session": session_id})
+    click.echo(json.dumps(receipts if was_array else receipts[0]))
+
+
+def _render_body(body) -> str:
+    return body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)
 
 
 @main.command()
@@ -98,7 +147,9 @@ def read(session_id: str, as_json: bool) -> None:
     table.add_column("id", justify="right", style="cyan", no_wrap=True)
     table.add_column("ts", style="green", no_wrap=True)
     table.add_column("session", style="magenta")
-    table.add_column("msg")
+    table.add_column("body")
+    table.add_column("attrs", style="yellow")
     for r in rows:
-        table.add_row(str(r["id"]), r["ts"], r["session_id"], r["msg"])
+        attrs = json.dumps(r["attrs"], ensure_ascii=False) if r["attrs"] is not None else ""
+        table.add_row(str(r["id"]), r["ts"], r["session"], _render_body(r["body"]), attrs)
     _console.print(table)
