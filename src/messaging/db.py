@@ -8,12 +8,12 @@ each agent passes its own.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -46,6 +46,13 @@ def _init(conn: sqlite3.Connection) -> None:
         """
     )
     conn.commit()
+
+
+def reset(conn: sqlite3.Connection) -> None:
+    """Drop all mailbox tables and recreate the empty schema. DESTRUCTIVE."""
+    conn.executescript("DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS sessions;")
+    conn.commit()
+    _init(conn)
 
 
 def register(

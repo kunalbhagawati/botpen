@@ -49,10 +49,21 @@ on a mailbox call.
 ## Commands
 
 ```
+./messages init                                  # create the DB + tables (idempotent)
 ./messages register <session-id> [--other JSON] [--telemetry JSON] [--params JSON]
 ./messages write    <session-id> [--m TEXT]      # TEXT may be multiline; omit to read stdin
 ./messages read     <session-id> [--json]
 ```
+
+### init — set up the database
+
+```bash
+./messages init            # create messages.db with the sessions + messages tables
+./messages init --reset    # DROP and recreate the tables (DESTRUCTIVE — wipes all messages)
+```
+
+Idempotent: safe to run repeatedly. Any other command also auto-creates the schema on
+first use, so `init` is mainly for an explicit, up-front setup (or `--reset` to wipe).
 
 ### register — store/refresh session metadata
 

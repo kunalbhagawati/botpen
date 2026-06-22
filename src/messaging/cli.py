@@ -27,18 +27,37 @@ def _root() -> Path:
     return Path(os.environ.get("MESSAGES_ROOT", Path.cwd())).resolve()
 
 
-def _connect():
+def _db_path() -> Path:
     root = _root()
     load_dotenv(root / ".env")
     raw = os.environ.get("MESSAGES_DB", "messages.db")
     p = Path(raw).expanduser()
-    db_path = p if p.is_absolute() else (root / p)
-    return db.connect(db_path)
+    return p if p.is_absolute() else (root / p)
+
+
+def _connect():
+    return db.connect(_db_path())
 
 
 @click.group()
 def main() -> None:
-    """SQLite-backed agent mailbox (register / write / read)."""
+    """SQLite-backed agent mailbox (init / register / write / read)."""
+
+
+@main.command()
+@click.option("--reset", is_flag=True, help="DROP existing tables and recreate them (DESTRUCTIVE)")
+def init(reset: bool) -> None:
+    """Create the SQLite database and tables (idempotent)."""
+    db_path = _db_path()
+    conn = db.connect(db_path)  # connect() already creates tables if absent
+    if reset:
+        db.reset(conn)
+        click.echo("reset: dropped and recreated tables")
+    tables = [r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    )]
+    click.echo(f"db ready at {db_path}")
+    click.echo(f"tables: {', '.join(tables)}")
 
 
 @main.command()
