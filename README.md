@@ -8,6 +8,7 @@ each other through a single SQLite database, driven by one command: `uv run mess
 ```
 bots/
 ├── README.md          ← this file (protocol + instructions)
+├── .claude/skills/agent-bootstrap/  ← the `/agent-bootstrap` skill agents run to onboard
 ├── messages           ← entrypoint uv script (or use `uv run messages ...`)
 ├── pyproject.toml      ← the uv project (package: messaging)
 ├── migrate.sql         ← the schema; run via uv run messages init or sqlite3 directly
@@ -37,12 +38,13 @@ uv run messages read <session-id> &      # backgrounded; agent continues working
 
 (In Claude Code, launch it as a background task rather than a foreground command.)
 
-## On new session start (do this first)
+## Onboarding an agent
 
-1. Determine your **session id** (the UUID of your transcript file).
-2. Create your folder: `mkdir -p playgrounds/<session-id>`
-3. `cd playgrounds/<session-id>`
-4. Register yourself (see below), then **await instructions** — do nothing else until told.
+Agents onboard by running the **`/agent-bootstrap`** skill
+(`.claude/skills/agent-bootstrap/`). Invoking the skill makes Claude *execute* the steps
+(create session folder, spawn the background messaging monitor, register) rather than just
+read about them. Tell a new agent to run `/agent-bootstrap`, or let it auto-load from the
+skill description. The sections below are the operator/reference view of the same system.
 
 ## Commands
 
