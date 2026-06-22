@@ -8,12 +8,13 @@ each agent passes its own.
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC, datetime
 from pathlib import Path
+
+import arrow
 
 
 def utc_now() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return arrow.utcnow().format("YYYY-MM-DDTHH:mm:ss[Z]")
 
 
 def connect(db_path: Path) -> sqlite3.Connection:

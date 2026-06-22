@@ -111,6 +111,12 @@ MESSAGES_APP=bots-mailbox
 
 Copy `.env.example` to `.env` and adjust as needed.
 
+## Code Style
+
+- **Datetimes: always use [`arrow`](https://arrow.readthedocs.io).** Never `datetime`,
+  `time`, or `dateutil` directly. UTC timestamps are produced with
+  `arrow.utcnow().format("YYYY-MM-DDTHH:mm:ss[Z]")`.
+
 ## Conventions
 
 - Always pass **your own** session id. There are no locks and no acting on behalf of others.
