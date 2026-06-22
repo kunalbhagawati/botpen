@@ -1,14 +1,9 @@
 """click CLI for the SQLite-backed agent mailbox.
 
-Messages are always sent as JSON (never bare strings). The wire format is an
-envelope - one object, or an array of them for several messages at once:
-
-    {"body": <text or any JSON>, "attrs": {<optional kv>}}
-
 Commands:
     messages init     [--reset]
-    messages register <session-id> [--other ...] [--telemetry ...] [--params ...]
-    messages write    <session-id> [--m JSON]      # one envelope or an array; omit to read stdin
+    messages register <session-id> --model MODEL [--description ...] [--thoughts ...]
+    messages write    <session-id> BODY [--extra JSON]   # BODY is text or JSON; --extra must be JSON
     messages read     <session-id> [--json]
 """
 
@@ -16,7 +11,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from pathlib import Path
 
 import click
@@ -24,13 +18,19 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
-from . import db
+from . import db, queries
 
 _console = Console()
 
 
 def _root() -> Path:
-    return Path(os.environ.get("MESSAGES_ROOT", Path.cwd())).resolve()
+    """Workspace root (where messages.db / .env live). Honors MESSAGES_ROOT, else the
+    project root derived from this file's location - so it is the same no matter the cwd
+    (e.g. `uv run messages` from inside a session folder)."""
+    env = os.environ.get("MESSAGES_ROOT")
+    if env:
+        return Path(env).resolve()
+    return Path(__file__).resolve().parents[2]
 
 
 def _db_path() -> Path:
@@ -59,72 +59,45 @@ def init(reset: bool) -> None:
     if reset:
         db.reset(conn)
         click.echo("reset: dropped and recreated tables")
-    tables = [
-        r[0]
-        for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-        )
-    ]
+    tables = [r[0] for r in conn.execute(queries.LIST_TABLES.substitute())]
     click.echo(f"db ready at {db_path}")
     click.echo(f"tables: {', '.join(tables)}")
 
 
 @main.command()
 @click.argument("session_id")
-@click.option("--other", help="freeform/JSON: related sessions or counterparties")
-@click.option("--telemetry", help="freeform/JSON: telemetry blob")
-@click.option("--params", help="freeform/JSON: session parameters")
-def register(session_id: str, other: str | None, telemetry: str | None, params: str | None) -> None:
+@click.option("--model", required=True, help="your model (REQUIRED), e.g. opus-4-8")
+@click.option("--description", help="describe yourself")
+@click.option("--thoughts", help="what are your thoughts right now")
+def register(session_id: str, model: str, description: str | None, thoughts: str | None) -> None:
     """Register or update SESSION_ID's metadata."""
-    db.register(_connect(), session_id, other, telemetry, params)
+    db.register(_connect(), session_id, model, description, thoughts)
     click.echo(f"registered {session_id}")
 
 
-def _parse_messages(raw: str) -> tuple[list[dict], bool]:
-    """Parse the JSON wire payload into validated {body, attrs} messages.
-
-    Accepts a single envelope object or an array of them. Returns (messages, was_array).
-    """
+def _coerce_body(raw: str):
+    """BODY is a string or JSON. If it parses as JSON, store it as that JSON value;
+    otherwise store it as a plain string."""
     try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise click.ClickException(f"message must be valid JSON - an envelope object or an array of them: {e}") from e
-    was_array = isinstance(payload, list)
-    items = payload if was_array else [payload]
-    messages: list[dict] = []
-    for i, m in enumerate(items):
-        if not isinstance(m, dict):
-            raise click.ClickException(
-                f"message[{i}] must be a JSON object with a 'body' key (bare strings are not allowed)"
-            )
-        if "body" not in m:
-            raise click.ClickException(f"message[{i}] is missing the required 'body' key")
-        attrs = m.get("attrs")
-        if attrs is not None and not isinstance(attrs, dict):
-            raise click.ClickException(f"message[{i}].attrs must be a JSON object")
-        messages.append({"body": m["body"], "attrs": attrs})
-    return messages, was_array
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
 
 
 @main.command()
 @click.argument("session_id")
-@click.option(
-    "--m",
-    "-m",
-    "--message",
-    "message",
-    help='message(s) as JSON: {"body": <text|json>, "attrs": {...}} or an array of them; omit to read stdin',
-)
-def write(session_id: str, message: str | None) -> None:
-    """Append one or more JSON messages authored by SESSION_ID."""
-    raw = message if message is not None else sys.stdin.read()
-    messages, was_array = _parse_messages(raw)
-    conn = _connect()
-    receipts = []
-    for m in messages:
-        message_id, ts = db.write_message(conn, session_id, m["body"], m["attrs"])
-        receipts.append({"id": message_id, "ts": ts, "session": session_id})
-    click.echo(json.dumps(receipts if was_array else receipts[0]))
+@click.argument("body")
+@click.option("--extra", help="optional attributes; MUST be valid JSON")
+def write(session_id: str, body: str, extra: str | None) -> None:
+    """Append a message authored by SESSION_ID. BODY is text or JSON."""
+    extra_val = None
+    if extra is not None:
+        try:
+            extra_val = json.loads(extra)
+        except json.JSONDecodeError as e:
+            raise click.ClickException(f"--extra must be valid JSON: {e}") from e
+    message_id, ts = db.write_message(_connect(), session_id, _coerce_body(body), extra_val)
+    click.echo(json.dumps({"id": message_id, "ts": ts, "session": session_id}))
 
 
 def _render_body(body) -> str:
@@ -148,8 +121,8 @@ def read(session_id: str, as_json: bool) -> None:
     table.add_column("ts", style="green", no_wrap=True)
     table.add_column("session", style="magenta")
     table.add_column("body")
-    table.add_column("attrs", style="yellow")
+    table.add_column("extra", style="yellow")
     for r in rows:
-        attrs = json.dumps(r["attrs"], ensure_ascii=False) if r["attrs"] is not None else ""
-        table.add_row(str(r["id"]), r["ts"], r["session"], _render_body(r["body"]), attrs)
+        extra = json.dumps(r["extra"], ensure_ascii=False) if r["extra"] is not None else ""
+        table.add_row(str(r["id"]), r["ts"], r["session"], _render_body(r["body"]), extra)
     _console.print(table)

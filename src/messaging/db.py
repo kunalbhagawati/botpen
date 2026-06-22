@@ -15,6 +15,8 @@ from typing import Any
 
 import arrow
 
+from . import queries
+
 
 def utc_now() -> str:
     return arrow.utcnow().format("YYYY-MM-DDTHH:mm:ss[Z]")
@@ -36,6 +38,7 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=30000")
+    conn.execute("PRAGMA foreign_keys=ON")
     _init(conn)
     return conn
 
@@ -47,7 +50,7 @@ def _init(conn: sqlite3.Connection) -> None:
 
 def reset(conn: sqlite3.Connection) -> None:
     """Drop all mailbox tables and recreate the empty schema. DESTRUCTIVE."""
-    conn.executescript("DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS sessions;")
+    conn.executescript(queries.DROP_TABLES.substitute())
     conn.commit()
     _init(conn)
 
@@ -55,21 +58,14 @@ def reset(conn: sqlite3.Connection) -> None:
 def register(
     conn: sqlite3.Connection,
     session_id: str,
-    other: str | None = None,
-    telemetry: str | None = None,
-    params: str | None = None,
+    model: str | None = None,
+    description: str | None = None,
+    thoughts: str | None = None,
 ) -> None:
     """Insert or update a session's metadata. Supplied fields overwrite; omitted fields keep prior values."""
     conn.execute(
-        """
-        INSERT INTO sessions (session_id, registered_at, other, telemetry, params)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(session_id) DO UPDATE SET
-            other     = COALESCE(excluded.other,     sessions.other),
-            telemetry = COALESCE(excluded.telemetry, sessions.telemetry),
-            params    = COALESCE(excluded.params,    sessions.params)
-        """,
-        (session_id, utc_now(), other, telemetry, params),
+        queries.REGISTER_SESSION.substitute(),
+        (session_id, utc_now(), model, description, thoughts),
     )
     conn.commit()
 
@@ -78,22 +74,22 @@ def write_message(
     conn: sqlite3.Connection,
     session_id: str,
     body: Any,
-    attrs: dict | None = None,
+    extra: Any = None,
 ) -> tuple[int, str]:
-    """Append one message (body + optional attrs). Auto-registers an unseen sender.
+    """Append one message (body + optional extra). Auto-registers an unseen sender.
 
     `body` may be any JSON value (a string, object, array, number, ...). It and
-    `attrs` are stored JSON-encoded and round-tripped back to their original types
+    `extra` are stored JSON-encoded and round-tripped back to their original types
     on read.
     """
     conn.execute(
-        "INSERT OR IGNORE INTO sessions (session_id, registered_at) VALUES (?, ?)",
+        queries.ENSURE_SESSION.substitute(),
         (session_id, utc_now()),
     )
     ts = utc_now()
     cur = conn.execute(
-        "INSERT INTO messages (session_id, ts, msg, extra) VALUES (?, ?, ?, ?)",
-        (session_id, ts, json.dumps(body), json.dumps(attrs) if attrs is not None else None),
+        queries.INSERT_MESSAGE.substitute(),
+        (session_id, ts, json.dumps(body), json.dumps(extra) if extra is not None else None),
     )
     conn.commit()
     message_id = cur.lastrowid
@@ -108,7 +104,7 @@ def _row_to_message(row: sqlite3.Row) -> dict:
         "session": row["session_id"],
         "ts": row["ts"],
         "body": json.loads(row["msg"]),
-        "attrs": json.loads(extra) if extra is not None else None,
+        "extra": json.loads(extra) if extra is not None else None,
     }
 
 
@@ -117,13 +113,10 @@ def read_since_last(conn: sqlite3.Connection, session_id: str) -> list[dict]:
 
     If the session has never written, return the entire history.
     """
-    row = conn.execute("SELECT MAX(id) AS last FROM messages WHERE session_id = ?", (session_id,)).fetchone()
+    row = conn.execute(queries.LAST_MESSAGE_ID.substitute(), (session_id,)).fetchone()
     last = row["last"]
     if last is None:
-        rows = conn.execute("SELECT id, session_id, ts, msg, extra FROM messages ORDER BY id").fetchall()
+        rows = conn.execute(queries.READ_ALL.substitute()).fetchall()
     else:
-        rows = conn.execute(
-            "SELECT id, session_id, ts, msg, extra FROM messages WHERE id > ? ORDER BY id",
-            (last,),
-        ).fetchall()
+        rows = conn.execute(queries.READ_SINCE.substitute(), (last,)).fetchall()
     return [_row_to_message(r) for r in rows]
