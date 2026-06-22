@@ -1,5 +1,5 @@
 ---
-name: agent-bootstrap
+name: bootstrap-agents
 description: Bootstrap this session as an agent in the bots/ multi-agent workspace - create the session folder, spawn the background messaging monitor, and register. Use at the start of any session working in the bots/ workspace, or when asked to join, onboard, or act as an agent here.
 allowed-tools: Bash
 ---
