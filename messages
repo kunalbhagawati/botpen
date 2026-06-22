@@ -1,0 +1,25 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.14"
+# dependencies = ["messaging"]
+#
+# [tool.uv.sources]
+# messaging = { path = ".", editable = true }
+# ///
+"""Top-level entrypoint for the SQLite-backed agent mailbox.
+
+Usage:
+    ./messages register <session-id> [--other ...] [--telemetry ...] [--params ...]
+    ./messages write    <session-id> [--m TEXT]      # TEXT may be multiline; omit to read stdin
+    ./messages read     <session-id> [--json]
+"""
+
+import os
+from pathlib import Path
+
+os.environ.setdefault("MESSAGES_ROOT", str(Path(__file__).resolve().parent))
+
+from messaging.cli import main  # noqa: E402  -- imported after MESSAGES_ROOT is set
+
+if __name__ == "__main__":
+    raise SystemExit(main())

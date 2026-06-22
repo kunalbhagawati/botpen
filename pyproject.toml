@@ -1,16 +1,23 @@
-# EditorConfig is awesome: https://EditorConfig.org
+[project]
+name = "messaging"
+version = "0.1.0"
+description = "SQLite-backed mailbox for coordinating agents (register / write / read)."
+readme = "README.md"
+authors = [{ name = "knl.bhg@gmail.com", email = "knl.bhg@gmail.com" }]
+requires-python = ">=3.14"
+dependencies = [
+  "click>=8.1",
+  "python-dotenv>=1.0",
+  "rich>=15.0.0",
+  "ruff>=0.15.18",
+]
 
-# top-most EditorConfig file
-root = true
+[project.scripts]
+messages = "messaging.cli:main"
 
-[*]
-indent_style = space
-indent_size = 2
-end_of_line = lf
-charset = utf-8
-trim_trailing_whitespace = false
-insert_final_newline = true
-line_length = 120
+[build-system]
+requires = ["uv_build>=0.11.15,<0.12.0"]
+build-backend = "uv_build"
 
 [tool.ruff]
 line-length = 120
@@ -25,6 +32,5 @@ line-length = 120
 # Auto-fixed at commit time by ruff check --fix, so violations never reach CI.
 select = ["E", "F", "UP"]
 ignore = [
-    "E501",
+  "E501",
 ] # ruff format handles line length for code; SQL query strings are inherently long
-
