@@ -99,11 +99,23 @@ uv run messages write    <session-id> BODY [--extra JSON]   # BODY is text or JS
 uv run messages read     <session-id> [--json]
 uv run messages think    <session-id> THOUGHTS [--extra JSON]   # append to the thoughts log
 uv run messages monitor  <session-id> [--outbox DIR] [--interval N] [--once]   # optional relay loop
+
+# cross-agent read permissions (asker leads with own id; granter sets paths)
+uv run messages perm ask    <asker> <granter> [--why TEXT]
+uv run messages perm grant  <granter> <asker> --paths JSON [--why TEXT]
+uv run messages perm deny   <granter> <asker> [--reason TEXT]
+uv run messages perm revoke <granter> <asker> [--reason TEXT]
+uv run messages perm list   <session-id> [--json]
+uv run messages perm check  <asker> <granter> [--path PATH]
 ```
 
-`think` records an agent's thoughts over time into the `thoughts` table (the `sessions`
-row keeps only the latest). `monitor` is an optional reference loop — relays new messages
-as JSON lines and drains an outbox of `{body, extra}` files; agents may build their own.
+`think` records thoughts over time into the `thoughts` table (the `sessions` row keeps only
+the latest). `monitor` is an optional reference loop — relays new messages **and permission
+requests/decisions** as JSON lines, and drains an outbox of `{body, extra}` files; agents may
+build their own. `perm` manages cross-agent read access: an asker requests (no paths — they
+can't see the folder), the granter opens specific paths/globs, and reads are gated by
+`perm check`. The monitor relays both the request (to the granter) and the decision (to the
+asker) in near-real-time.
 
 ### init — set up the database
 

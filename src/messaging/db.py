@@ -7,6 +7,7 @@ each agent passes its own.
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import sqlite3
@@ -150,3 +151,86 @@ def read_after(conn: sqlite3.Connection, after_id: int, exclude_session: str | N
     if exclude_session is not None:
         messages = [m for m in messages if m["session"] != exclude_session]
     return messages
+
+
+# --- cross-agent read permissions ---------------------------------------------------------
+
+def _row_to_permission(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "asker": row["asker"],
+        "granter": row["granter"],
+        "status": row["status"],
+        "ask_why": row["ask_why"],
+        "grant_why": row["grant_why"],
+        "paths": json.loads(row["paths"]) if row["paths"] else None,
+        "revoked_at": row["revoked_at"],
+        "revoked_reason": row["revoked_reason"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _ensure_sessions(conn: sqlite3.Connection, *session_ids: str) -> None:
+    now = utc_now()
+    for sid in session_ids:
+        conn.execute(queries.ENSURE_SESSION.substitute(), (sid, now))
+
+
+def ask_permission(conn: sqlite3.Connection, asker: str, granter: str, ask_why: str | None = None) -> None:
+    """`asker` requests read access to `granter`'s folder. Keeps an existing grant intact."""
+    _ensure_sessions(conn, asker, granter)
+    now = utc_now()
+    conn.execute(queries.ASK_PERMISSION.substitute(), (asker, granter, ask_why, now, now))
+    conn.commit()
+
+
+def grant_permission(
+    conn: sqlite3.Connection, granter: str, asker: str, paths: list, grant_why: str | None = None
+) -> None:
+    """`granter` grants `asker` read access to `paths` (strings/globs). Clears any prior revoke."""
+    _ensure_sessions(conn, asker, granter)
+    now = utc_now()
+    conn.execute(queries.GRANT_PERMISSION.substitute(), (asker, granter, grant_why, json.dumps(paths), now, now))
+    conn.commit()
+
+
+def deny_permission(conn: sqlite3.Connection, granter: str, asker: str, reason: str | None = None) -> int:
+    """`granter` denies `asker`'s request (reason stored in grant_why). Returns rows affected."""
+    cur = conn.execute(queries.DENY_PERMISSION.substitute(), (reason, utc_now(), granter, asker))
+    conn.commit()
+    return cur.rowcount
+
+
+def revoke_permission(conn: sqlite3.Connection, granter: str, asker: str, reason: str | None = None) -> int:
+    """`granter` revokes `asker`'s access. Returns the number of rows affected."""
+    now = utc_now()
+    cur = conn.execute(queries.REVOKE_PERMISSION.substitute(), (now, reason, now, granter, asker))
+    conn.commit()
+    return cur.rowcount
+
+
+def list_permissions(conn: sqlite3.Connection, session_id: str) -> list[dict]:
+    """All permission rows where `session_id` is the asker or the granter."""
+    rows = conn.execute(queries.LIST_PERMISSIONS.substitute(), (session_id, session_id)).fetchall()
+    return [_row_to_permission(r) for r in rows]
+
+
+def permissions_changed(conn: sqlite3.Connection, session_id: str, after_ts: str) -> list[dict]:
+    """Permission rows involving `session_id` (asker or granter) updated after `after_ts`
+    (an ISO timestamp cursor). Used by the monitor to relay requests and decisions to both sides."""
+    rows = conn.execute(queries.PERMISSIONS_CHANGED.substitute(), (session_id, session_id, after_ts)).fetchall()
+    return [_row_to_permission(r) for r in rows]
+
+
+def can_read(conn: sqlite3.Connection, asker: str, granter: str, path: str | None = None) -> dict:
+    """Does `asker` hold a live grant on `granter`'s folder? Optionally test a specific `path`
+    against the granted globs. Returns {allowed, paths}."""
+    row = conn.execute(queries.CHECK_PERMISSION.substitute(), (asker, granter)).fetchone()
+    if row is None:
+        return {"allowed": False, "paths": None}
+    paths = json.loads(row["paths"]) if row["paths"] else []
+    if path is None:
+        return {"allowed": True, "paths": paths}
+    allowed = any(p == path or fnmatch.fnmatch(path, p) for p in paths)
+    return {"allowed": allowed, "paths": paths}

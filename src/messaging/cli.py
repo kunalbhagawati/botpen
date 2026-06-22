@@ -174,24 +174,131 @@ def monitor(session_id: str, interval: float, state: str | None, outbox: str | N
     """
     conn = _connect()
     state_path = Path(state) if state else Path.cwd() / f".messages-monitor-{session_id}.cursor"
+    perm_state_path = Path(str(state_path) + ".perm")
+
     try:
         cursor = int(state_path.read_text().strip())
     except (FileNotFoundError, ValueError):
         cursor = 0
+    try:
+        perm_cursor = perm_state_path.read_text().strip()  # ISO timestamp cursor
+    except FileNotFoundError:
+        perm_cursor = ""
     outbox_dir = Path(outbox) if outbox else None
     if outbox_dir:
         outbox_dir.mkdir(parents=True, exist_ok=True)
 
-    click.echo(json.dumps({"event": "up", "session": session_id, "cursor": cursor, "interval": interval}))
+    click.echo(json.dumps({"event": "up", "session": session_id, "cursor": cursor, "perm_cursor": perm_cursor}))
     while True:
         if outbox_dir:
             _drain_outbox(conn, session_id, outbox_dir)
+
         fresh = db.read_after(conn, cursor, exclude_session=session_id)
         for r in fresh:
             click.echo(json.dumps({"event": "incoming", **r}, ensure_ascii=False))
             cursor = max(cursor, r["id"])
         if fresh:
             state_path.write_text(str(cursor))
-        if once and fresh:
+
+        # Relay permission events both ways: requests to me as granter, decisions to me as asker.
+        changed = db.permissions_changed(conn, session_id, perm_cursor)
+        for r in changed:
+            if r["granter"] == session_id and r["status"] == "requested":
+                click.echo(json.dumps({"event": "permission-request", **r}, ensure_ascii=False))
+            elif r["asker"] == session_id and r["status"] in ("granted", "denied", "revoked"):
+                click.echo(json.dumps({"event": "permission-decision", **r}, ensure_ascii=False))
+            perm_cursor = max(perm_cursor, r["updated_at"])
+        if changed:
+            perm_state_path.write_text(perm_cursor)
+
+        if once and (fresh or changed):
             return
         time.sleep(interval)
+
+
+@main.group()
+def perm() -> None:
+    """Cross-agent read permissions: ask / grant / deny / revoke / list / check."""
+
+
+@perm.command("ask")
+@click.argument("session_id")
+@click.argument("granter")
+@click.option("--why", help="why you want access")
+def perm_ask(session_id: str, granter: str, why: str | None) -> None:
+    """Ask GRANTER for read access to their folder (SESSION_ID is you, the asker).
+
+    You do NOT specify paths — you don't know the granter's folder. The granter decides
+    what (if anything) to open up.
+    """
+    db.ask_permission(_connect(), session_id, granter, why)
+    click.echo(json.dumps({"event": "asked", "asker": session_id, "granter": granter, "status": "requested"}))
+
+
+@perm.command("grant")
+@click.argument("session_id")
+@click.argument("asker")
+@click.option("--paths", required=True, help="JSON array of path strings/globs you open up")
+@click.option("--why", help="why you grant / trust them")
+def perm_grant(session_id: str, asker: str, paths: str, why: str | None) -> None:
+    """Grant ASKER read access to PATHS in your folder (SESSION_ID is you, the granter)."""
+    try:
+        paths_val = json.loads(paths)
+    except json.JSONDecodeError as e:
+        raise click.ClickException(f"--paths must be valid JSON (an array of strings): {e}") from e
+    if not isinstance(paths_val, list):
+        raise click.ClickException("--paths must be a JSON array of strings/globs")
+    db.grant_permission(_connect(), session_id, asker, paths_val, why)
+    click.echo(json.dumps({"event": "granted", "granter": session_id, "asker": asker, "paths": paths_val}))
+
+
+@perm.command("deny")
+@click.argument("session_id")
+@click.argument("asker")
+@click.option("--reason", help="why you are denying")
+def perm_deny(session_id: str, asker: str, reason: str | None) -> None:
+    """Deny ASKER's request (SESSION_ID is you, the granter)."""
+    n = db.deny_permission(_connect(), session_id, asker, reason)
+    click.echo(json.dumps({"event": "denied", "granter": session_id, "asker": asker, "rows": n}))
+
+
+@perm.command("revoke")
+@click.argument("session_id")
+@click.argument("asker")
+@click.option("--reason", help="why you are revoking")
+def perm_revoke(session_id: str, asker: str, reason: str | None) -> None:
+    """Revoke ASKER's previously granted access (SESSION_ID is you, the granter)."""
+    n = db.revoke_permission(_connect(), session_id, asker, reason)
+    click.echo(json.dumps({"event": "revoked", "granter": session_id, "asker": asker, "rows": n}))
+
+
+@perm.command("list")
+@click.argument("session_id")
+@click.option("--json", "as_json", is_flag=True, help="emit JSON instead of a table")
+def perm_list(session_id: str, as_json: bool) -> None:
+    """List permissions involving SESSION_ID (as asker and as granter)."""
+    rows = db.list_permissions(_connect(), session_id)
+    if as_json:
+        click.echo(json.dumps(rows, indent=2))
+        return
+    if not rows:
+        _console.print("[dim]no permissions[/dim]")
+        return
+    table = Table(title=f"permissions for {session_id}", show_lines=True)
+    for col in ("id", "asker", "granter", "status", "paths", "ask_why", "grant_why"):
+        table.add_column(col)
+    for r in rows:
+        paths = json.dumps(r["paths"], ensure_ascii=False) if r["paths"] else ""
+        table.add_row(
+            str(r["id"]), r["asker"], r["granter"], r["status"], paths, r["ask_why"] or "", r["grant_why"] or ""
+        )
+    _console.print(table)
+
+
+@perm.command("check")
+@click.argument("asker")
+@click.argument("granter")
+@click.option("--path", help="optional specific path to test against the granted globs")
+def perm_check(asker: str, granter: str, path: str | None) -> None:
+    """Check whether ASKER may read GRANTER's folder (optionally a specific PATH)."""
+    click.echo(json.dumps(db.can_read(_connect(), asker, granter, path)))
