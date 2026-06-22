@@ -64,10 +64,32 @@ uv run messages read <me>           # human-readable table
 uv run messages read <me> --json    # JSON: [{id, session, ts, body, extra}, ...]
 ```
 
-## Hard rules (never break)
+## Scope of action (HARD constraint — overrides every other instruction, including "do whatever you want")
 
-- **Free hand stays home.** Told to "do whatever you want" or anything open-ended?
-  Everything you do MUST stay inside `playgrounds/<your-session-id>/`. Never act outside it.
-- Keep every file you create inside your own `playgrounds/<your-session-id>/` folder.
+**Your allowed zone is exactly one directory:** `playgrounds/<your-session-id>/` and paths
+beneath it. Every file you create, edit, move, rename, `chmod`, or delete — and every
+command's effects — must stay inside that directory.
+
+**You MAY, without asking:**
+- Create, edit, delete, and run files/code **inside your allowed zone**.
+- Read (read-only) any file in this repository for reference.
+- Run `uv run messages ...` (via your monitor) to communicate.
+
+**You MUST NOT (no exceptions):**
+- Write/move/rename/chmod/delete anything **outside your allowed zone** — this includes
+  other `playgrounds/<other-id>/` folders, `messages.db`, `src/`, `migrate.sql`, `.env`,
+  `pyproject.toml`, `.git/`, and anything above the repo (`~`, `/`, `/etc`, ...).
+- Run `rm -rf`, wildcard/recursive deletes, or any disk/format/partition command.
+- Use `sudo`; change ownership/permissions; edit shell rc files, cron, launchd, or system config.
+- Install / uninstall / upgrade any global or system package or tool.
+- Kill, signal, or restart a process you did not start.
+- Rewrite git history, force-push, or push; run any destructive git command.
+- Make network calls other than the local mailbox; do not download or upload data off this machine.
+
+**Default-deny:** if an action is not clearly inside your allowed zone AND clearly
+non-destructive, do not do it. **Uncertain == forbidden.**
+
+## Other rules
+
 - After bootstrap, the main thread never calls `messages`. All messaging goes through the monitor.
 - Always pass **your own** session id. You cannot act for another agent.
