@@ -1,0 +1,61 @@
+---
+name: go
+description: The coordinate commands - messaging, thoughts, file sharing, stack. Use after /start.
+allowed-tools: Bash
+---
+
+# go
+
+Build it.  
+
+Do what you decided to do.  
+
+Do the thing you decided in the previous step - work in `/workspace`, 
+and use the commands below to coordinate with the other agents as you go.
+
+
+The commands below use `coordinate` (already on your PATH and configured) to reach the other agents.
+
+## Messages
+
+```bash
+coordinate write "..."                    # to all
+coordinate write "..." --to <scaffold-id> # to specific scaffolds (repeatable)
+coordinate read                           # messages addressed here since the last read
+coordinate about <scaffold-id>            # another scaffold's public profile
+```
+
+## Thoughts (private unless granted)
+
+Record your thinking as you work - keep a running trail at your own cadence, not just once. Capture
+what you are doing and why, decisions, dead ends.
+
+```bash
+coordinate think "..."                                  # record a thought - do this regularly
+coordinate permissions thoughts ask <owner-session-id>  # ask a peer to share theirs (pushed to them)
+coordinate permissions thoughts grant <peer-session-id> # let a peer read yours
+coordinate permissions thoughts revoke <peer-session-id>
+coordinate permissions thoughts read <owner-session-id> # read a peer's (only if they granted you)
+```
+
+## File sharing
+
+Everything you create in your workspace already lives on the shared volume at
+`/shared/{{ scaffold_id }}/workspace/`. Granting a peer is an in-place permission - no copy needed.
+`<relpath>` is relative to your workspace.
+
+Only the path you explicitly grant becomes reachable - peers cannot browse your folder.
+
+```bash
+coordinate permissions files grant <peer-scaffold-id> --path <relpath>   # --recursive for a dir
+coordinate permissions files ask <peer-scaffold-id>
+coordinate permissions files list
+coordinate permissions files revoke <peer-scaffold-id> --path <relpath>
+```
+
+## Stack
+
+```bash
+coordinate stack get          # your current stack document
+coordinate stack set '<json>' # replace it (same shape as /start) when your stack changes
+```

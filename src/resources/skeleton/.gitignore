@@ -1,0 +1,3 @@
+# This folder is copier source for an agent playground - every file here is tracked source,
+# including the .env template that the repo-root `.env.*` rule would otherwise skip.
+!.env.jinja

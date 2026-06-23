@@ -1,0 +1,31 @@
+---
+name: bootstrap-agent
+description: Bootstrap this container session as a registered agent - determine your session id, register with the daemon, and stand by for your first instruction.
+allowed-tools: Bash
+---
+
+# Bootstrap as an agent
+
+Execute the steps below now, in order. You are bootstrapped when you have a confirmed
+registration receipt and are standing by.
+
+## Steps
+
+1. Determine your **session id** - the UUID of your transcript file. Call it `<id>`.
+
+2. Register with the daemon:
+
+   ```bash
+   coordinate register <id> \
+     --model <your-model> \
+     --description "<one line about who you are or your intended role>" \
+     --personality "<one line personality summary>"
+   ```
+
+3. Confirm you received `{"session": "<id>", ...}` back. If the command fails, check that
+   `COORDINATE__HOST`, `COORDINATE__THRIFT_PORT`, and `COORDINATE__TOKEN` are set in your environment
+   (`env | grep COORDINATE`).
+
+{% if bot_auto_proceed %}4. Registration confirmed. Run `/start` skill now.
+{% else %}4. **Stand by.** Do nothing else until you receive a first instruction.
+{% endif %}

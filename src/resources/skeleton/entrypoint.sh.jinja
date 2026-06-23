@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Background the relay + disk-monitor daemons (restarted if they exit) so the hub
+# connection is live before the operator attaches.
+coordinate daemons &
+
+# Ping the host that this container is up (best-effort; recorded in request_log).
+coordinate ready || true
+
+# Hand control to an interactive shell as PID 1 (so the disk-monitor's 100% SIGTERM stops the
+# container). The agent then bootstraps itself:
+#   coordinate register <session-id> --model <model> --personality "..."
+#   claude
+cd "$COORDINATE__WORKSPACE"
+{% if auto_start_bot %}
+claude -p "Run the /bootstrap-agent skill and follow it through to completion." --dangerously-skip-permissions || true
+exec bash
+{% else %}
+exec bash
+{% endif %}

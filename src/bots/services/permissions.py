@@ -1,175 +1,143 @@
-"""Cross-agent read permissions over the mailbox (SQLModel).
+"""Host-mediated shared-volume permissions over the mailbox (SQLModel).
 
-ask / grant / deny / revoke / list / check, plus the change-feed the monitor relays. One row
-per (asker, granter) pair. Each public function is wrapped by `core.db.transactional` (session
-injected as `s`, committed on success).
+Folder-read grants are no longer advisory: an agent asks the host to apply POSIX ACLs on
+paths inside its own `/shared/<slug>/`, and every action is recorded here as an append-only
+log row (requested -> applied / revoked / failed). This module owns only the log; applying
+the actual ACLs (via a helper container) lives in the docker layer and calls
+`mark_applied`/`mark_failed`.
+
+The canonical agent identity is `scaffold_id`. `grant` is a JSON column - store/read plain
+Python objects directly; no manual json-encoding.
 """
 
 from __future__ import annotations
 
-import fnmatch
-import json
+from typing import Any
 
 from sqlmodel import select
 
-from ..core.db import transactional
-from ..core.models import Permission, Session
-from .utils import normalize_session, utc_now
+from ..core.db import atomic, with_session
+from ..core.models import PermissionLog
+from .utils import utc_now
 
 
-def _ensure_sessions(s, *session_ids: str) -> None:
-    now = utc_now()
-    added = False
-    for sid in session_ids:
-        if s.get(Session, sid) is None:
-            s.add(Session(session_id=sid, registered_at=now))
-            added = True
-    if added:
-        s.flush()  # insert parent rows before any FK-referencing child in this transaction
-
-
-def _get(s, asker: str, granter: str) -> Permission | None:
-    return s.exec(
-        select(Permission).where(Permission.asker == asker, Permission.granter == granter)
-    ).first()
-
-
-def _to_dict(p: Permission) -> dict:
+def _to_dict(p: PermissionLog) -> dict:
     return {
         "id": p.id,
-        "asker": p.asker,
-        "granter": p.granter,
+        "permission_type": p.permission_type,
+        "owner": p.owner_scaffold_id,
+        "peer": p.peer_scaffold_id,
+        "grant": p.grant,
+        "peer_permission_request_reason": p.peer_permission_request_reason,
+        "owner_permission_decision_reason": p.owner_permission_decision_reason,
         "status": p.status,
-        "ask_why": p.ask_why,
-        "grant_why": p.grant_why,
-        "paths": json.loads(p.paths) if p.paths else None,
-        "revoked_at": p.revoked_at,
-        "revoked_reason": p.revoked_reason,
+        "error": p.error,
         "created_at": p.created_at,
         "updated_at": p.updated_at,
+        "applied_at": p.applied_at,
     }
 
 
-@transactional
-def ask_permission(s, asker: str, granter: str, ask_why: str | None = None) -> None:
-    """`asker` requests read access to `granter`'s folder. Keeps an existing grant intact."""
-    asker, granter = normalize_session(asker), normalize_session(granter)
+@atomic
+def log_ask(s, owner_scaffold: str, peer_scaffold: str, reason: str | None = None) -> dict:
+    """Record `peer_scaffold` asking `owner_scaffold` for access. No ACL is applied - this is a
+    relayable request the owner acts on with a grant."""
     now = utc_now()
-    _ensure_sessions(s, asker, granter)
-    p = _get(s, asker, granter)
-    if p is None:
-        p = Permission(asker=asker, granter=granter, status="requested", ask_why=ask_why, created_at=now, updated_at=now)
-    else:
-        p.ask_why = ask_why
-        p.status = "granted" if p.status == "granted" else "requested"
-        p.updated_at = now
-    s.add(p)
+    row = PermissionLog(
+        permission_type="ask",
+        owner_scaffold_id=owner_scaffold,
+        peer_scaffold_id=peer_scaffold,
+        peer_permission_request_reason=reason,
+        status="requested",
+        created_at=now,
+        updated_at=now,
+    )
+    s.add(row)
+    s.flush()
+    return _to_dict(row)
 
 
-@transactional
-def grant_permission(s, granter: str, asker: str, paths: list, grant_why: str | None = None) -> None:
-    """`granter` grants `asker` read access to `paths` (strings/globs). Clears any prior revoke.
-
-    Raises ValueError if any path would expose `journal.jsonl` - a journal is always private.
-    """
-    bad = [p for p in paths if "journal.jsonl" in p or fnmatch.fnmatch("journal.jsonl", p)]
-    if bad:
-        raise ValueError(f"journal.jsonl is private and can never be granted (offending paths: {bad})")
-    asker, granter = normalize_session(asker), normalize_session(granter)
+@atomic
+def log_grant(s, owner_scaffold: str, peer_scaffold: str, grant: Any, reason: str | None = None) -> dict:
+    """Record `owner_scaffold` granting `peer_scaffold` access described by the `grant` tree
+    (paths under the owner's `/shared/<slug>/`). Returns the row at status `requested`; the ACL
+    layer flips it to `applied`/`failed`."""
     now = utc_now()
-    _ensure_sessions(s, asker, granter)
-    p = _get(s, asker, granter)
-    if p is None:
-        p = Permission(
-            asker=asker, granter=granter, status="granted", grant_why=grant_why,
-            paths=json.dumps(paths), created_at=now, updated_at=now,
+    row = PermissionLog(
+        permission_type="grant",
+        owner_scaffold_id=owner_scaffold,
+        peer_scaffold_id=peer_scaffold,
+        grant=grant,
+        owner_permission_decision_reason=reason,
+        status="requested",
+        created_at=now,
+        updated_at=now,
+    )
+    s.add(row)
+    s.flush()
+    return _to_dict(row)
+
+
+@atomic
+def log_revoke(
+    s,
+    owner_scaffold: str,
+    peer_scaffold: str,
+    grant: Any = None,
+    reason: str | None = None,
+) -> dict:
+    """Record `owner_scaffold` revoking `peer_scaffold`'s access (optionally scoped to the
+    `grant` tree). Returns the row at status `requested` (the ACL layer flips it to
+    `revoked`/`failed`)."""
+    now = utc_now()
+    row = PermissionLog(
+        permission_type="revoke",
+        owner_scaffold_id=owner_scaffold,
+        peer_scaffold_id=peer_scaffold,
+        grant=grant,
+        owner_permission_decision_reason=reason,
+        status="requested",
+        created_at=now,
+        updated_at=now,
+    )
+    s.add(row)
+    s.flush()
+    return _to_dict(row)
+
+
+@atomic
+def mark_applied(s, log_id: int) -> None:
+    """Mark a logged grant/revoke as carried out (ACL applied on the volume)."""
+    row = s.get(PermissionLog, log_id)
+    if row is None:
+        return
+    now = utc_now()
+    row.status = "revoked" if row.permission_type == "revoke" else "applied"
+    row.applied_at = now
+    row.updated_at = now
+    s.add(row)
+
+
+@atomic
+def mark_failed(s, log_id: int, error: str) -> None:
+    """Mark a logged action as failed, recording the error."""
+    row = s.get(PermissionLog, log_id)
+    if row is None:
+        return
+    row.status = "failed"
+    row.error = error
+    row.updated_at = utc_now()
+    s.add(row)
+
+
+@with_session
+def list_log(s, scaffold_id: str | None = None) -> list[dict]:
+    """The permission log, optionally filtered to rows where `scaffold_id` is owner or peer."""
+    stmt = select(PermissionLog)
+    if scaffold_id is not None:
+        stmt = stmt.where(
+            (PermissionLog.owner_scaffold_id == scaffold_id) | (PermissionLog.peer_scaffold_id == scaffold_id)
         )
-    else:
-        p.status = "granted"
-        p.grant_why = grant_why
-        p.paths = json.dumps(paths)
-        p.revoked_at = None
-        p.revoked_reason = None
-        p.updated_at = now
-    s.add(p)
-
-
-@transactional
-def deny_permission(s, granter: str, asker: str, reason: str | None = None) -> int:
-    """`granter` denies `asker`'s request (reason stored in grant_why). Returns rows affected."""
-    asker, granter = normalize_session(asker), normalize_session(granter)
-    p = _get(s, asker, granter)
-    if p is None:
-        return 0
-    p.status = "denied"
-    p.grant_why = reason
-    p.updated_at = utc_now()
-    s.add(p)
-    return 1
-
-
-@transactional
-def revoke_permission(s, granter: str, asker: str, reason: str | None = None) -> int:
-    """`granter` revokes `asker`'s access. Returns the number of rows affected."""
-    asker, granter = normalize_session(asker), normalize_session(granter)
-    now = utc_now()
-    p = _get(s, asker, granter)
-    if p is None:
-        return 0
-    p.status = "revoked"
-    p.revoked_at = now
-    p.revoked_reason = reason
-    p.updated_at = now
-    s.add(p)
-    return 1
-
-
-@transactional
-def list_permissions(s, session_id: str) -> list[dict]:
-    """All permission rows where `session_id` is the asker or the granter."""
-    session_id = normalize_session(session_id)
-    rows = s.exec(
-        select(Permission)
-        .where((Permission.asker == session_id) | (Permission.granter == session_id))
-        # pyrefly: ignore [bad-argument-type]
-        .order_by(Permission.id)
-    ).all()
+    # pyrefly: ignore [bad-argument-type]
+    rows = s.exec(stmt.order_by(PermissionLog.id)).all()
     return [_to_dict(p) for p in rows]
-
-
-@transactional
-def permissions_changed(s, session_id: str, after_ts: str) -> list[dict]:
-    """Permission rows involving `session_id` updated after `after_ts` (ISO timestamp cursor).
-    Used by the monitor to relay requests and decisions to both sides."""
-    session_id = normalize_session(session_id)
-    rows = s.exec(
-        select(Permission)
-        .where(
-            (Permission.asker == session_id) | (Permission.granter == session_id),
-            Permission.updated_at > after_ts,
-        )
-        # pyrefly: ignore [bad-argument-type]
-        .order_by(Permission.updated_at, Permission.id)
-    ).all()
-    return [_to_dict(p) for p in rows]
-
-
-@transactional
-def can_read(s, asker: str, granter: str, path: str | None = None) -> dict:
-    """Does `asker` hold a live grant on `granter`'s folder? Optionally test a specific `path`
-    against the granted globs. Returns {allowed, paths}."""
-    asker, granter = normalize_session(asker), normalize_session(granter)
-    p = s.exec(
-        select(Permission).where(
-            Permission.asker == asker,
-            Permission.granter == granter,
-            Permission.status == "granted",
-        )
-    ).first()
-    if p is None:
-        return {"allowed": False, "paths": None}
-    paths = json.loads(p.paths) if p.paths else []
-    if path is None:
-        return {"allowed": True, "paths": paths}
-    allowed = any(g == path or fnmatch.fnmatch(path, g) for g in paths)
-    return {"allowed": allowed, "paths": paths}

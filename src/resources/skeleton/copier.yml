@@ -1,0 +1,83 @@
+_templates_suffix: .jinja
+_envops:
+  keep_trailing_newline: true
+
+# Skeleton-internal files that must not be rendered into a playground.
+_exclude:
+  - "copier.yml"
+  - ".gitignore"
+
+slug:
+  type: str
+  help: "Unique slug for this agent playground (used in image/container names)"
+
+scaffold_id:
+  type: str
+  help: "Scaffold run identifier"
+
+secret_key:
+  type: str
+  help: "Secret token for the coordinate daemon (COORDINATE__TOKEN)"
+
+uid:
+  type: int
+  help: "UID for the agent user inside the container"
+
+gid:
+  type: int
+  help: "GID for the agent group inside the container"
+
+max_disk_mb:
+  type: int
+  help: "Maximum /workspace disk budget in MB"
+
+apk_packages:
+  type: str
+  help: "Extra Alpine apk packages to install (space-separated)"
+  default: ""
+
+installed:
+  type: str
+  help: "Human-readable summary of the stack installed in the image"
+  default: ""
+
+oauth_token:
+  type: str
+  help: "CLAUDE_CODE_OAUTH_TOKEN value for the agent container"
+
+base_image:
+  type: str
+  help: "Base Docker image for the agent stage"
+  default: "alpine:3.21"
+
+daemon_host:
+  type: str
+  help: "Hostname the container uses to reach the manage daemon"
+  default: "host.docker.internal"
+
+daemon_thrift_port:
+  type: int
+  help: "Thrift RPC port of the manage daemon"
+
+daemon_ws_port:
+  type: int
+  help: "WebSocket port of the manage daemon"
+
+shared_volume:
+  type: str
+  help: "Name of the external Docker volume mounted at /shared"
+
+agent_user:
+  type: str
+  help: "Username (and group) created inside the container"
+  default: "agent"
+
+bot_auto_proceed:
+  type: bool
+  help: "If true, the agent proceeds to /start itself after bootstrap instead of waiting for a human first instruction"
+  default: false
+
+auto_start_bot:
+  type: bool
+  help: "start claude automatically on spin-up (otherwise the operator runs it)"
+  default: false
