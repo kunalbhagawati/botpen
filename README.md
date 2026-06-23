@@ -98,10 +98,13 @@ It is a secret - `.env.local` is gitignored; never commit it.
 2. **Scaffold an agent** (builds an isolated image + container, injects the token, drops you in):
 
    ```bash
-   uv run manage.py scaffold new                          # interactive stack picker
-   uv run manage.py scaffold new --language python --db redis   # non-interactive
-   uv run manage.py scaffold new --slug alice --no-attach       # run detached
+   ./manage.py scaffold                                   # interactive stack picker
+   ./manage.py scaffold --language python --db redis      # non-interactive
+   ./manage.py scaffold --slug alice --no-attach          # run detached
+   ./manage.py scaffold --auto-start-bot --bot-auto-proceed-instructions   # fully autonomous
    ```
+
+   (`./manage.py ...` and `uv run manage.py ...` are equivalent - the shebang routes through uv.)
 
    The base image is a blank Alpine; you pick any subset of language/db/tools to pre-install
    (the agent is free to `apk add` more). Re-run to add more agents - they find each other
@@ -110,17 +113,57 @@ It is a secret - `.env.local` is gitignored; never commit it.
 3. **Inside the container**, the agent bootstraps itself with the `coordinate` binary:
    `coordinate register <session-id>` → then its skills (`/start` → `/go`).
 
+### Run headless (no human in the loop)
+
+Two flags make the agent run itself - no attach, no operator:
+
+```bash
+./manage.py scaffold --auto-start-bot --bot-auto-proceed-instructions --no-attach
+```
+
+- `--auto-start-bot` - the container launches `claude` itself on spin-up (otherwise you run it).
+- `--bot-auto-proceed-instructions` - the agent proceeds through bootstrap → `/start` on its own,
+  with no human first instruction.
+
+To drive an already-running container headless yourself:
+
+```bash
+docker exec <botpen-slug> claude -p "Run the /bootstrap-agent skill and follow it through." --dangerously-skip-permissions
+```
+
+The injected `CLAUDE_CODE_OAUTH_TOKEN` authenticates `claude -p` automatically - no browser login.
+
 ## Command surface
 
 ```
-uv run manage.py db          setup [--reset]
-uv run manage.py serve                                   # the Hub daemon
-uv run manage.py scaffold    new [--slug S] [--max-disk MB] [--language L ...] [--db D ...] [--tools T ...] [--no-attach] [--auto] [--yes]
-uv run manage.py permissions list [--scaffold ID] [--json]   # operator audit of the permission log
+./manage.py db          setup [--reset]
+./manage.py serve                                   # the Hub daemon
+./manage.py scaffold    [--slug S] [--max-disk MB] [--language L ...] [--db D ...] [--tools T ...] [--no-attach] [--auto-start-bot] [--bot-auto-proceed-instructions] [--yes]
+./manage.py permissions list [--scaffold ID] [--json]   # operator audit of the permission log
+./manage.py teardown    [--docker:components=containers,images,volumes] [--docker:stopped-only] [--yes]
 ```
 
 Agents do not use the host CLI; from inside a container they use `coordinate`
 (`register`/`write`/`read`/`about`/`think`/`thoughts`/`permissions`/`stack`/`relay`/...).
+
+## Cleaning up
+
+> [!TIP]
+> Remove everything this created - all `botpen-` containers, `botpen-agent` images, the shared
+> volume, and the playground folders:
+>
+> ```bash
+> ./manage.py teardown
+> ```
+
+> [!CAUTION]
+> The agents' files live on the **shared volume**. If you want to inspect what they built, do
+> **not** remove volumes - drop `volumes` from the component list so the volume (and its files)
+> survive:
+>
+> ```bash
+> ./manage.py teardown --docker:components=containers,images   # keeps the shared volume + files
+> ```
 
 ## Configuration (`.env`)
 

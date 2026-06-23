@@ -129,22 +129,45 @@ def reap_stopped(after_mins: int) -> list[str]:
     return reaped
 
 
-def prune_all() -> dict:
-    """Remove everything botpen created on Docker + disk: all botpen-* containers, all botpen-agent
-    images, the shared volume, and every playground folder. Leaves the DB (use `db setup --reset`)."""
-    containers = subprocess.run(
-        ["docker", "ps", "-a", "--filter", "name=botpen-", "--format", "{{.Names}}"],
-        capture_output=True, text=True,
-    ).stdout.split()
-    for name in containers:
-        subprocess.run(["docker", "rm", "-f", name], capture_output=True)
-    images = set(subprocess.run(
-        ["docker", "images", "--filter", "reference=botpen-agent*", "--format", "{{.Repository}}:{{.Tag}}"],
-        capture_output=True, text=True,
-    ).stdout.split())
-    for image in images:
-        subprocess.run(["docker", "rmi", "-f", image], capture_output=True)
-    subprocess.run(["docker", "volume", "rm", "-f", settings.SHARED_VOLUME_NAME], capture_output=True)
+def teardown(components: list[str], stopped_only: bool = False) -> dict:
+    """Clean up playground folders and the selected Docker components.
+
+    Always removes all playground folders.  Then, for each entry in `components`
+    (values: ``containers``, ``images``, ``volumes``):
+    - ``containers``: list ``botpen-`` containers (exited-only when ``stopped_only``),
+      then ``docker rm -f`` each.
+    - ``images``: ``docker rmi -f`` every ``botpen-agent*`` image.
+    - ``volumes``: ``docker volume rm -f`` the shared volume.
+
+    Returns a summary dict with removal counts.
+    """
+    ps_cmd = ["docker", "ps", "-a", "--filter", "name=botpen-", "--format", "{{.Names}}"]
+    if stopped_only:
+        ps_cmd += ["--filter", "status=exited"]
+
+    removed_containers: list[str] = []
+    removed_images: list[str] = []
+    removed_volume: str | None = None
+
+    if "containers" in components:
+        names = subprocess.run(ps_cmd, capture_output=True, text=True).stdout.split()
+        for name in names:
+            subprocess.run(["docker", "rm", "-f", name], capture_output=True)
+        removed_containers = names
+
+    if "images" in components:
+        imgs = set(subprocess.run(
+            ["docker", "images", "--filter", "reference=botpen-agent*", "--format", "{{.Repository}}:{{.Tag}}"],
+            capture_output=True, text=True,
+        ).stdout.split())
+        for image in imgs:
+            subprocess.run(["docker", "rmi", "-f", image], capture_output=True)
+        removed_images = list(imgs)
+
+    if "volumes" in components:
+        subprocess.run(["docker", "volume", "rm", "-f", settings.SHARED_VOLUME_NAME], capture_output=True)
+        removed_volume = settings.SHARED_VOLUME_NAME
+
     playgrounds = settings.WORKING_DIR / "playgrounds"
     pg = 0
     if playgrounds.exists():
@@ -152,4 +175,10 @@ def prune_all() -> dict:
             if p.is_dir():
                 shutil.rmtree(p, ignore_errors=True)
                 pg += 1
-    return {"containers": len(containers), "images": len(images), "volume": settings.SHARED_VOLUME_NAME, "playgrounds": pg}
+
+    return {
+        "containers": len(removed_containers),
+        "images": len(removed_images),
+        "volume": removed_volume,
+        "playgrounds": pg,
+    }

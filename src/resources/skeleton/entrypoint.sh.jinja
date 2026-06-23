@@ -13,4 +13,9 @@ coordinate ready || true
 #   coordinate register <session-id> --model <model> --personality "..."
 #   claude
 cd "$COORDINATE__WORKSPACE"
+{% if auto_start_bot %}
+claude -p "Run the /bootstrap-agent skill and follow it through to completion." --dangerously-skip-permissions || true
 exec bash
+{% else %}
+exec bash
+{% endif %}

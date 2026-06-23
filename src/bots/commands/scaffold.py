@@ -1,6 +1,6 @@
-"""``scaffold`` command group: provision a new isolated agent container.
+"""``scaffold`` command: provision a new isolated agent container.
 
-`scaffold new` mints a Scaffold (id + token + uid/gid), resolves the runtime stack (flags, or an
+`scaffold` mints a Scaffold (id + token + uid/gid), resolves the runtime stack (flags, or an
 interactive multi-step form), and renders the playground skeleton into `playgrounds/<slug>/`.
 Building + running the container is Phase 5.
 """
@@ -24,11 +24,6 @@ from ..services.scaffolding import templates as templates_service
 from .console import console
 
 
-@click.group()
-def scaffold() -> None:
-    """Provision and manage isolated agent containers."""
-
-
 def _resolve_stack(flags: dict[str, tuple[str, ...]], interactive: bool) -> dict[str, list[str]]:
     """Resolve each catalog category to a chosen SUBSET: explicit flags, an interactive
     multi-select, or empty (blank Alpine). Iterates the catalog, so new categories appear in the
@@ -46,16 +41,27 @@ def _resolve_stack(flags: dict[str, tuple[str, ...]], interactive: bool) -> dict
     return stack
 
 
-@scaffold.command("new")
+@click.command()
 @click.option("--slug", default=None, help="playground name (default: a random agent-XXXXXX)")
 @click.option("--max-disk", "max_disk", type=int, default=None, help="disk budget MB (default from config)")
 @click.option("--language", "languages", multiple=True, help="language(s) to install (repeatable)")
 @click.option("--db", "dbs", multiple=True, help="database(s) to install (repeatable)")
 @click.option("--tools", "tools", multiple=True, help="extra tool(s) to install (repeatable)")
 @click.option("--no-attach", is_flag=True, help="do not attach a terminal after run")
-@click.option("--auto", is_flag=True, help="agent proceeds to /start itself after bootstrap (no human first instruction)")
+@click.option(
+    "--bot-auto-proceed-instructions",
+    "bot_auto_proceed",
+    is_flag=True,
+    help="the bot proceeds through bootstrap -> /start itself, with no human first instruction",
+)
+@click.option(
+    "--auto-start-bot",
+    "auto_start_bot",
+    is_flag=True,
+    help="start claude in the container automatically on spin-up (otherwise the operator runs it)",
+)
 @click.option("--yes", is_flag=True, help="non-interactive: install nothing extra for unset categories")
-def new(slug, max_disk, languages, dbs, tools, no_attach, auto, yes) -> None:
+def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed, auto_start_bot, yes) -> None:
     """Scaffold a new isolated agent playground."""
     slug = slug or f"agent-{secrets.token_hex(3)}"
     max_disk = max_disk or settings.SCAFFOLD_DEFAULT_MAX_DISK_MB
@@ -84,7 +90,8 @@ def new(slug, max_disk, languages, dbs, tools, no_attach, auto, yes) -> None:
         "daemon_ws_port": settings.DAEMON_WS_PORT,
         "shared_volume": settings.SHARED_VOLUME_NAME,
         "agent_user": "agent",
-        "auto": auto,
+        "bot_auto_proceed": bot_auto_proceed,
+        "auto_start_bot": auto_start_bot,
     }
     templates_service.render(dest, data)
     templates_service.stage_build_inputs(dest, sc["secret_key"])
@@ -101,6 +108,3 @@ def new(slug, max_disk, languages, dbs, tools, no_attach, auto, yes) -> None:
         console.print(f"  attach with: docker exec -it {container} bash")
     else:
         docker_service.attach(container)
-
-
-scaffold.add_command(new)

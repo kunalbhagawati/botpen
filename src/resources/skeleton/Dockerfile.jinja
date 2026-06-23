@@ -39,6 +39,11 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 COPY .claude /home/{{ agent_user }}/.claude
 
+# Mark onboarding complete so INTERACTIVE `claude` uses the injected CLAUDE_CODE_OAUTH_TOKEN instead
+# of redirecting to a browser login (headless `claude -p` skips this gate; the interactive TUI gates
+# on ~/.claude.json existing). The token itself still does the auth.
+RUN printf '{"hasCompletedOnboarding": true, "primaryApiType": "claude_ai"}\n' > /home/{{ agent_user }}/.claude.json
+
 RUN chown -R {{ uid }}:{{ gid }} /home/{{ agent_user }}
 
 WORKDIR /home/{{ agent_user }}

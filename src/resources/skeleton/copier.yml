@@ -72,7 +72,12 @@ agent_user:
   help: "Username (and group) created inside the container"
   default: "agent"
 
-auto:
+bot_auto_proceed:
   type: bool
-  help: "If true, the agent proceeds to /start itself after bootstrap instead of waiting"
+  help: "If true, the agent proceeds to /start itself after bootstrap instead of waiting for a human first instruction"
+  default: false
+
+auto_start_bot:
+  type: bool
+  help: "start claude automatically on spin-up (otherwise the operator runs it)"
   default: false
