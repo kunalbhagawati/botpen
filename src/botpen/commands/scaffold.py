@@ -64,7 +64,7 @@ def _resolve_stack(flags: dict[str, tuple[str, ...]], interactive: bool) -> dict
     "--model",
     type=click.Choice(["opus", "sonnet", "haiku", "default"]),
     default=None,
-    help="model alias for the auto-started bot (claude --model); only used with --auto-start-bot",
+    help="default claude model in the container (written to ~/.claude/settings.json; applies to both the auto-started bot and an attached operator)",
 )
 @click.option("--yes", is_flag=True, help="non-interactive: install nothing extra for unset categories")
 def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed, auto_start_bot, model, yes) -> None:

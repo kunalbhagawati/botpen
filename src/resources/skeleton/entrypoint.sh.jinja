@@ -14,7 +14,7 @@ coordinate ready || true
 #   claude
 cd "$COORDINATE__WORKSPACE"
 {% if auto_start_bot %}
-claude -p "Run the /bootstrap-agent skill and follow it through to completion."{% if bot_model %} --model {{ bot_model }}{% endif %} --dangerously-skip-permissions || true
+claude -p "Run the /bootstrap-agent skill and follow it through to completion." --dangerously-skip-permissions || true
 exec bash
 {% else %}
 exec bash
