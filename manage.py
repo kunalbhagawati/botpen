@@ -5,13 +5,13 @@ The shebang runs the file through uv, so `./manage.py ...` uses the project venv
 right Python) - same as `uv run manage.py ...`. Running a script *by path* also puts its
 directory (the repo root) on ``sys.path``, so the root-level ``config`` module is importable
 everywhere downstream. This bootstraps that, builds the ``settings`` singleton, then runs the
-root Click group with the command groups (db / docker / permissions / serve / scaffold) mounted.
+root Click group with the command groups (db / permissions / serve / scaffold / teardown) mounted.
 
 Run (either form):
-    ./manage.py scaffold new --language python
+    ./manage.py scaffold --language python
     uv run manage.py serve
     ./manage.py db setup
-    ./manage.py docker prune
+    ./manage.py teardown --db
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ if str(_ROOT) not in sys.path:
 # pyrefly: ignore [missing-import]
 from config import settings  # noqa: E402, F401  -- build the settings singleton up front
 
-from bots.cli import cli  # noqa: E402
+from botpen.cli import cli  # noqa: E402
 
 
 def main() -> None:

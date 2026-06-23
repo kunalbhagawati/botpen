@@ -1,7 +1,7 @@
 """SQLModel engine, session, and schema lifecycle for the mailbox.
 
 The schema is owned by Alembic migrations (`migrations/`), generated from the SQLModel models
-in :mod:`bots.core.models`. `setup_db()` (exposed as `db setup`) applies them; callers never
+in :mod:`botpen.core.models`. `setup_db()` (exposed as `db setup`) applies them; callers never
 touch Alembic directly. SQLite serializes writes itself (WAL + busy_timeout), so callers never
 manage a lock. The code is deliberately SQLite-specific - swap the engine/pragmas here when the
 backend changes.

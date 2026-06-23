@@ -1,4 +1,4 @@
-"""Alembic environment for the bots mailbox.
+"""Alembic environment for botpen.
 
 Adds the repo root to sys.path (so the root-level `config` is importable however Alembic is
 launched), points the DB url at `settings.DB_PATH`, and targets the SQLModel metadata.
@@ -21,7 +21,7 @@ if str(_ROOT) not in sys.path:
 from config import settings  # noqa: E402
 from sqlmodel import SQLModel  # noqa: E402
 
-from bots.core import models  # noqa: E402, F401  -- registers tables on SQLModel.metadata
+from botpen.core import models  # noqa: E402, F401  -- registers tables on SQLModel.metadata
 
 config = context.config
 config.set_main_option("sqlalchemy.url", f"sqlite:///{settings.DB_PATH}")

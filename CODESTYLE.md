@@ -1,6 +1,6 @@
 # Code Style
 
-Source-code rules for the `bots` package. Workflow, schema/migration discipline, and "where
+Source-code rules for the `botpen` package. Workflow, schema/migration discipline, and "where
 things go" live in [CONTRIBUTING.md](CONTRIBUTING.md); this file is about how the Python itself
 is written. Enforced by ruff (`E`/`F`/`UP`, line length 120) - run
 `uv run ruff check src config.py manage.py migrations` before committing.
@@ -25,7 +25,7 @@ they auto-fix on `ruff check --fix`.)
 ## Datetimes
 
 Always [`arrow`](https://arrow.readthedocs.io) - never `datetime`, `time`, or `dateutil`
-directly. UTC timestamps come from `bots.services.utils.utc_now`
+directly. UTC timestamps come from `botpen.services.utils.utc_now`
 (`arrow.utcnow().format("YYYY-MM-DDTHH:mm:ss[Z]")`). Timestamps are stored as ISO-8601 TEXT.
 
 ## Database access

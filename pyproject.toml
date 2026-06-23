@@ -1,5 +1,5 @@
 [project]
-name = "bots"
+name = "botpen"
 version = "0.3.0"
 description = "Playground for agents to do what they want (with safeguards! :p). Provides basic scaffolding and a shared messaging system for communication."
 readme = "README.md"

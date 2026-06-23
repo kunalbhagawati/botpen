@@ -23,7 +23,7 @@ full principle.
 ```
 .
 ├── manage.py            # Entry (Django-style): puts the repo root on sys.path so `config` is
-│                        #   importable, then runs the root Click group (bots.cli).
+│                        #   importable, then runs the root Click group (botpen.cli).
 ├── config.py            # pydantic-settings Settings - ALL app config + computed paths.
 │                        #   The `settings` singleton; import as `from config import settings`.
 ├── .env / .env.local    # Config cascade (.env = committed base; .env.local = gitignored overrides)
@@ -31,7 +31,7 @@ full principle.
 ├── migrations/          # Alembic: env.py + versions/ (hand-written raw SQL, see below)
 │
 └── src/
-    ├── bots/            # Host-side package
+    ├── botpen/          # Host-side package
     │   ├── cli.py       #   Root Click group; mounts db / serve / scaffold / permissions
     │   ├── commands/    #   One module per group: db / serve / scaffold / permissions
     │   │   ├── utils.py #     CLI-only helpers
@@ -175,7 +175,7 @@ scaffold new
 - **Playground folder**: `playgrounds/{epochmilli}.{scaffold_id}.{slug}/` - durable, named by
   scaffold identity (not session, which is unknown at scaffold time).
 - **Stack**: flat per-category multi-select (`language` / `db` / `tools`) driven by
-  `SCAFFOLD_STACK_CATALOG` in `src/bots/stack_catalog.py`. Blank Alpine base; opt-in `apk add`.
+  `SCAFFOLD_STACK_CATALOG` in `src/botpen/stack_catalog.py`. Blank Alpine base; opt-in `apk add`.
   The agent can `apk add` more at runtime.
 - **Shared volume**: `SHARED_VOLUME_NAME` (default `botpen_shared`) mounted at `/shared` in
   every container. Per-scaffold dir: `/shared/<slug>/`.
@@ -198,8 +198,8 @@ that the agent may ignore. Read/write via `stack_get` / `stack_set` RPC.
 ## Layering
 
 ```
-manage.py  →  config (settings)  +  bots.cli
-bots.cli   →  commands/  →  services/  →  core/
+manage.py  →  config (settings)  +  botpen.cli
+botpen.cli   →  commands/  →  services/  →  core/
 commands/  →  also config (paths) + console
 ```
 
@@ -235,18 +235,18 @@ on nothing in the package except `config`. No layer reaches back up.
 
 | Change type | Location |
 |---|---|
-| App config / constants / paths | `config.py` (`settings`); never scattered in code. Stack catalog: `src/bots/stack_catalog.py`; stack JSON Schema: `src/bots/stack_schema.py`. |
-| A table / schema change | `src/bots/core/models.py` + a new hand-written Alembic migration |
-| DB engine / session / pragmas | `src/bots/core/db.py`; only services open sessions (via decorators) |
-| A data operation (host side) | `src/bots/services/<concern>.py` (wrap reads with `@with_session`, writes with `@atomic`) |
-| Scaffold provisioning / template rendering | `src/bots/services/scaffolding/scaffold.py` / `templates.py` / `docker.py` |
-| A host CLI command | `src/bots/commands/<group>.py`, registered on its group in `cli.py` |
+| App config / constants / paths | `config.py` (`settings`); never scattered in code. Stack catalog: `src/botpen/stack_catalog.py`; stack JSON Schema: `src/botpen/stack_schema.py`. |
+| A table / schema change | `src/botpen/core/models.py` + a new hand-written Alembic migration |
+| DB engine / session / pragmas | `src/botpen/core/db.py`; only services open sessions (via decorators) |
+| A data operation (host side) | `src/botpen/services/<concern>.py` (wrap reads with `@with_session`, writes with `@atomic`) |
+| Scaffold provisioning / template rendering | `src/botpen/services/scaffolding/scaffold.py` / `templates.py` / `docker.py` |
+| A host CLI command | `src/botpen/commands/<group>.py`, registered on its group in `cli.py` |
 | Agent-facing RPC / command | `src/coordinate_cli/cli.py` + `src/resources/hub.thrift` (add to IDL first) |
 | In-container daemons | `src/coordinate_cli/daemons.py` |
 | Playground template files | `src/resources/skeleton/` (Jinja + copier.yml) |
 | Agent runtime skills (live in container) | `src/resources/skeleton/.claude/skills/` |
-| Data-domain helpers (timestamps, id normalization) | `src/bots/services/utils.py` |
-| CLI parse/render helpers | `src/bots/commands/utils.py` |
+| Data-domain helpers (timestamps, id normalization) | `src/botpen/services/utils.py` |
+| CLI parse/render helpers | `src/botpen/commands/utils.py` |
 
 ## Docs map
 

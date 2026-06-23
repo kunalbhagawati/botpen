@@ -17,7 +17,7 @@ from .commands.teardown import teardown
 
 @click.group()
 def cli() -> None:
-    """bots - agent sandbox control plane (db / permissions / serve / scaffold / teardown)."""
+    """botpen - agent sandbox control plane (db / permissions / serve / scaffold / teardown)."""
 
 
 cli.add_command(db)

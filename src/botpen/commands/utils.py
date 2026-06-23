@@ -1,6 +1,6 @@
 """CLI-layer parsing/rendering helpers shared across the command groups.
 
-Connection/path resolution lives in :mod:`bots.core.db` and ``config.settings``; this module
+Connection/path resolution lives in :mod:`botpen.core.db` and ``config.settings``; this module
 is just CLI input coercion and output rendering.
 """
 
