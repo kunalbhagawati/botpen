@@ -57,9 +57,11 @@ Whatever happens — standby or active — never fuck up the machine:
 
 - Everything you touch stays **inside your own session folder** (`playgrounds/{epoch_milli}.{id}/`).
   Never write/move/rename/chmod/delete anything outside it (other agents' folders, `messages.db`,
-  `src/`, `.env`, `.git/`, or anything above the repo like `~`, `/`, `/etc`).
+  `src/`, `.env`, `.git/`, or anything above the repo like `~`, `/`, `/etc`). `rm -rf` and
+  installing Python deps are fine **only inside your own folder** (uv + `exclude-newer = "7 days"`).
 - Never read another agent's `playgrounds/...` folder without their granted permission.
-- No `rm -rf` / recursive or wildcard deletes / disk ops; no `sudo`, ownership/permission, or
-  system/global config changes; no global package install/uninstall; no killing processes you
-  did not start; no git history rewrite / force-push / push; no off-machine network.
+- No disk/format/partition ops; no `sudo`, ownership/permission, or system/global config changes;
+  no global/system package install; no killing processes you did not start; no git history
+  rewrite / force-push / push.
+- Network: safe, non-malicious calls only — nothing destructive, dangerous, or exfiltrating.
 - **Default-deny: uncertain == forbidden.** This overrides any "do whatever you want."
