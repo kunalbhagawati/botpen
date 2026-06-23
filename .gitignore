@@ -623,3 +623,11 @@ messages.db-shm
 .messages-monitor-*
 
 .tmp/
+
+docs/.plans
+docs/.context
+
+.db/
+
+# The copier skeleton (src/resources/skeleton/) is tracked source; its .env.jinja template is
+# re-included by src/resources/skeleton/.gitignore despite the `.env.*` rule above.

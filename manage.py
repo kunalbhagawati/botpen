@@ -1,15 +1,17 @@
-#!/usr/bin/env python3
-"""Repo-root entry point for the bots mailbox (Django-style).
+#!/usr/bin/env -S uv run --quiet python
+"""Repo-root entry point for botpen (Django-style).
 
-Running a script *by path* puts its directory (the repo root) on ``sys.path``, so the
-root-level ``config`` module is importable everywhere downstream. This bootstraps that,
-builds the ``settings`` singleton, then runs the root Click group with the three command
-groups (``messages`` / ``db`` / ``permissions``) mounted as subcommands.
+The shebang runs the file through uv, so `./manage.py ...` uses the project venv (deps + the
+right Python) - same as `uv run manage.py ...`. Running a script *by path* also puts its
+directory (the repo root) on ``sys.path``, so the root-level ``config`` module is importable
+everywhere downstream. This bootstraps that, builds the ``settings`` singleton, then runs the
+root Click group with the command groups (db / docker / permissions / serve / scaffold) mounted.
 
-Run:
-    uv run manage.py messages write <me> "hello"
-    uv run manage.py db setup
-    uv run manage.py permissions grant <me> <asker> --paths '["*.svg"]'
+Run (either form):
+    ./manage.py scaffold new --language python
+    uv run manage.py serve
+    ./manage.py db setup
+    ./manage.py docker prune
 """
 
 from __future__ import annotations

@@ -48,24 +48,47 @@ def session() -> DBSession:
     return DBSession(_engine)
 
 
-def transactional(fn):
-    """Run `fn` inside a session, injected as its first argument. Commits on success, closes
-    after; an exception propagates with the transaction rolled back.
+def with_session(fn):
+    """Run `fn` inside a session, injected as its first argument; no commit. The base session
+    boundary - reads use it directly, writes layer `atomic` on top.
 
-        @transactional
-        def write(s, ...): ...
+        @with_session
+        def read(s, ...): ...
 
-    Callers invoke `write(...)` - the session is supplied by the decorator, not the caller.
-    """
+    The `session()` context manager closes on exit, which ends (rolls back) the transaction, so
+    reads need nothing extra. Ending it promptly keeps SQLite's WAL checkpointer unblocked (a
+    lingering read txn can grow the WAL unbounded). On an exception the close rolls back, so an
+    uncommitted write is discarded and the error propagates."""
 
     @wraps(fn)
     def wrapper(*args, **kwargs):
         with session() as s:
-            result = fn(s, *args, **kwargs)
-            s.commit()
-            return result
+            return fn(s, *args, **kwargs)
 
     return wrapper
+
+
+def atomic(fn):
+    """Run a write `fn` inside a session and commit on success. Built on `with_session`, so the
+    session lifecycle (and rollback-on-exception via the context-manager close) is shared - this
+    only adds the commit.
+
+        @atomic
+        def write(s, ...): ...
+    """
+
+    @with_session
+    @wraps(fn)
+    def wrapped(s, *args, **kwargs):
+        result = fn(s, *args, **kwargs)
+        s.commit()
+        # Fold the WAL into messages.db right after the write, so a plain sqlite viewer opening the
+        # file sees it immediately instead of waiting for the ~1000-page (~4MB) auto-checkpoint that
+        # this low-traffic daemon rarely reaches. PASSIVE never blocks readers/writers and is cheap.
+        s.connection().exec_driver_sql("PRAGMA wal_checkpoint(PASSIVE)")
+        return result
+
+    return wrapped
 
 
 def _alembic_config() -> Config:
