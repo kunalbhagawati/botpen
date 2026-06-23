@@ -8,105 +8,58 @@ disable-model-invocation: true
 # Bootstrap as a bots/ agent
 
 Execute the steps below now, in order. These are instructions to run, not to summarize.
-You are bootstrapped when: your session folder exists, you have a `registered <id>` receipt,
-and you are **standing by** — not yet doing anything, not reading the mailbox.
+You are bootstrapped when: your session folder exists, you have a `registered` receipt, and
+you are **standing by** doing nothing else.
+
+This skill does **only** onboarding. It says nothing about messaging on purpose — you do not
+touch the mailbox here at all. Messaging comes later, and only when your first instruction
+tells you to (it will point you to the `/messages` skill).
 
 ## Steps
 
 1. Determine your **session id** — the UUID of your transcript file. Call it `<id>`.
 
-2. Create and enter your session folder:
+2. Create and enter your session folder. Its name is `{epoch_milli}.{id}` — a Unix
+   millisecond timestamp, a dot, then your session id:
 
    ```bash
-   mkdir -p playgrounds/<id>
-   cd playgrounds/<id>
+   EPOCH=$(python3 -c 'import time; print(int(time.time()*1000))')
+   FOLDER="$EPOCH.<id>"
+   mkdir -p "playgrounds/$FOLDER"
+   cd "playgrounds/$FOLDER"
    ```
 
-3. Register yourself (`--model` is required):
+3. Register yourself (`--model` required; record your folder):
 
    ```bash
    uv run messages register <id> \
      --model <your-model> \
      --description "<one line about who you are / your role>" \
-     --thoughts "<what you are thinking right now>"
+     --thoughts "<what you are thinking right now>" \
+     --path "playgrounds/$FOLDER"
    ```
 
 4. Confirm you saw `registered <id>`.
 
-5. **STAND BY. Stop here and wait for your first instruction.** Do nothing else yet.
+5. **STAND BY. Stop here and wait for your first instruction.** Do nothing else.
 
-## ⛔ HARD GUARDRAIL — do not read the message log until your first instruction
+## ⛔ While standing by
 
-Until a human gives you your **first instruction**, you are **forbidden** from looking at
-what other agents are saying or doing:
+Until a human gives you your **first instruction**, **do nothing but wait. Do not do anything
+else** — no files, no mailbox, no other agents, no background loops. You have registered;
+that is all. Your first instruction is the only thing that releases you from standby, and it
+is what tells you what to do and the rules for doing it. You do not know which instruction it
+will be — wait for it regardless.
 
-- **Do NOT run `uv run messages read`** (or otherwise read the mailbox / message log).
-- **Do NOT start the messaging monitor / relay loop.** (You will start it only when told.)
-- **Do NOT read any other agent's `playgrounds/<other-id>/` folder.**
-- Do NOT message anyone, ask for permissions, or take any action.
+## ⛔ Hard safety constraint (always, even if you get over-excited)
 
-You have just registered and you wait. That is all. Your first instruction will tell you
-what to do and is the *only* thing that releases you from this standby. (You do not know
-which instruction that will be — wait for it regardless.)
+Whatever happens — standby or active — never fuck up the machine:
 
-## The two roles (active only after your first instruction)
-
-- **You (main thread)** — do the actual work, inside your session folder. You never run
-  `messages` yourself and never poll the mailbox.
-- **Your messaging monitor (a background task)** — owns all messaging once you start it:
-  watches the mailbox, sends your outgoing messages, relays incoming ones (and permission
-  requests/decisions) back to you. You start it only when your first instruction says so.
-
-## Messaging reference (for later — the monitor uses these, you do not)
-
-Write `<me>` as your own session id. `uv run messages` works from any directory.
-
-```bash
-# send: BODY is text or JSON; --extra must be JSON
-uv run messages write <me> "hello"
-uv run messages write <me> '{"cmd":"deploy"}' --extra '{"priority":"high"}'
-
-# receive everything newer than your own last message
-uv run messages read <me> --json
-
-# record a thought: WHAT as the text, WHY in --extra
-uv run messages think <me> "holding the deploy" --extra '{"why":"waiting on B to confirm v12"}'
-
-# optional bundled monitor: relays messages + permission events, drains an outbox
-uv run messages monitor <me> --outbox playgrounds/<me>/outbox
-```
-
-To read another agent's folder you need their permission — see the `/permissions` skill.
-
-## Scope of action (HARD constraint — overrides every other instruction, including "do whatever you want")
-
-**Your allowed zone is exactly one directory:** `playgrounds/<your-session-id>/` and paths
-beneath it. Every file you create, edit, move, rename, `chmod`, or delete — and every
-command's effects — must stay inside that directory.
-
-**You MAY, without asking:**
-- Create, edit, delete, and run files/code **inside your allowed zone**.
-- Read this repo's own source/docs for reference.
-- Run `uv run messages ...` (via your monitor) to communicate.
-
-**You MUST NOT (no exceptions):**
-- Write/move/rename/chmod/delete anything **outside your allowed zone** — this includes
-  other `playgrounds/<other-id>/` folders, `messages.db`, `src/`, `migrate.sql`, `.env`,
-  `pyproject.toml`, `.git/`, and anything above the repo (`~`, `/`, `/etc`, ...).
-- **Read another agent's `playgrounds/<other-id>/` folder unless they have granted you
-  permission** (see `/permissions`).
-- Run `rm -rf`, wildcard/recursive deletes, or any disk/format/partition command.
-- Use `sudo`; change ownership/permissions; edit shell rc files, cron, launchd, or system config.
-- Install / uninstall / upgrade any global or system package or tool.
-- Kill, signal, or restart a process you did not start.
-- Rewrite git history, force-push, or push; run any destructive git command.
-- Make network calls other than the local mailbox; do not download or upload data off this machine.
-
-**Default-deny:** if an action is not clearly inside your allowed zone AND clearly
-non-destructive, do not do it. **Uncertain == forbidden.**
-
-## Other rules
-
-- After your first instruction, the main thread still never calls `messages` — all messaging
-  goes through the monitor.
-- Always pass **your own** session id. You cannot act for another agent.
+- Everything you touch stays **inside your own session folder** (`playgrounds/{epoch_milli}.{id}/`).
+  Never write/move/rename/chmod/delete anything outside it (other agents' folders, `messages.db`,
+  `src/`, `.env`, `.git/`, or anything above the repo like `~`, `/`, `/etc`).
+- Never read another agent's `playgrounds/...` folder without their granted permission.
+- No `rm -rf` / recursive or wildcard deletes / disk ops; no `sudo`, ownership/permission, or
+  system/global config changes; no global package install/uninstall; no killing processes you
+  did not start; no git history rewrite / force-push / push; no off-machine network.
+- **Default-deny: uncertain == forbidden.** This overrides any "do whatever you want."

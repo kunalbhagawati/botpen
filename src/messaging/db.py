@@ -72,12 +72,13 @@ def register(
     model: str | None = None,
     description: str | None = None,
     thoughts: str | None = None,
+    path: str | None = None,
 ) -> None:
     """Insert or update a session's metadata. Supplied fields overwrite; omitted fields keep prior values."""
     session_id = normalize_session(session_id)
     conn.execute(
         queries.REGISTER_SESSION.substitute(),
-        (session_id, utc_now(), model, description, thoughts),
+        (session_id, utc_now(), model, description, thoughts, path),
     )
     conn.commit()
 

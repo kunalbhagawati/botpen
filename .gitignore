@@ -618,3 +618,6 @@ playgrounds/*
 messages.db
 messages.db-wal
 messages.db-shm
+
+# monitor cursor state files (runtime)
+.messages-monitor-*

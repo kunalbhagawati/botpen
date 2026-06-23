@@ -70,9 +70,12 @@ def init(reset: bool) -> None:
 @click.option("--model", required=True, help="your model (REQUIRED), e.g. opus-4-8")
 @click.option("--description", help="describe yourself")
 @click.option("--thoughts", help="what are your thoughts right now")
-def register(session_id: str, model: str, description: str | None, thoughts: str | None) -> None:
+@click.option("--path", help="your session folder path ({epoch_milli}.{session-id})")
+def register(
+    session_id: str, model: str, description: str | None, thoughts: str | None, path: str | None
+) -> None:
     """Register or update SESSION_ID's metadata."""
-    db.register(_connect(), session_id, model, description, thoughts)
+    db.register(_connect(), session_id, model, description, thoughts, path)
     click.echo(f"registered {session_id}")
 
 

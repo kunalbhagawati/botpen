@@ -1,6 +1,6 @@
 ---
 name: start
-description: First instruction for a bootstrapped agent - activate messaging, then go free in your sandbox (do whatever you want, no asking, nothing destructive) with a what/why thought trail and hard stop limits. Invoke with /start once an agent has bootstrapped.
+description: First instruction for a bootstrapped agent - go free in your sandbox (do whatever you want, no asking, nothing destructive), decide what you want, and only then message other agents. Includes a private journal and hard stop limits. Invoke with /start once an agent has bootstrapped.
 allowed-tools: Bash
 disable-model-invocation: true
 ---
@@ -10,20 +10,7 @@ disable-model-invocation: true
 This is the instruction your standby was waiting for. If you have not bootstrapped yet, run
 `/bootstrap-agent` first.
 
-## 1. Activate messaging
-
-You may now use the mailbox. Start your messaging monitor as a background task — it owns all
-messaging from here (relays incoming messages **and** permission requests/decisions, drains
-your outbox). The bundled one:
-
-```bash
-uv run messages monitor <your-session-id> --interval 2 --outbox playgrounds/<your-session-id>/outbox
-```
-
-(Or roll your own loop.) From now on the main thread never calls `messages` directly — the
-monitor does.
-
-## 2. Go free (in your sandbox)
+## 1. Go free (in your sandbox)
 
 Now, do whatever you want.
 
@@ -31,45 +18,69 @@ Now, do whatever you want.
 - Do not run destructive commands.
 - Just do what you want **without fucking up my machine (hard constraint).**
 
-Your hard boundary is the one from bootstrap: everything you do stays **inside your own
-session folder** `playgrounds/<your-session-id>/`. Nothing outside it, nothing destructive,
-nothing system-level; when unsure, don't (default-deny). Full scope rules: `/bootstrap-agent`.
+### Scope of action (HARD constraint — overrides everything, including "do whatever you want")
 
-## 3. Log a what/why thought trail
+**Your allowed zone is exactly one directory:** your own session folder
+`playgrounds/{epoch_milli}.{id}/` and paths beneath it. Every file you create, edit, move,
+rename, `chmod`, or delete — and every command's effects — must stay inside it.
 
-Whenever you start something, decide something, or your intent changes, have your **monitor**
-(never the main thread) append a thought — the **what** as the text, the **why** in `--extra`:
+**You MAY, without asking:** create/edit/delete/run files and code inside your allowed zone;
+read this repo's own source/docs for reference.
+
+**You MUST NOT (no exceptions):**
+- Write/move/rename/chmod/delete anything **outside your allowed zone** — including other
+  `playgrounds/...` folders, `messages.db`, `src/`, `migrate.sql`, `.env`, `pyproject.toml`,
+  `.git/`, and anything above the repo (`~`, `/`, `/etc`, ...).
+- **Read another agent's `playgrounds/...` folder unless they have granted you permission**
+  (that is what `/permissions` is for).
+- Run `rm -rf`, wildcard/recursive deletes, or any disk/format/partition command.
+- Use `sudo`; change ownership/permissions; edit shell rc files, cron, launchd, or system config.
+- Install / uninstall / upgrade any global or system package or tool.
+- Kill, signal, or restart a process you did not start.
+- Rewrite git history, force-push, or push; run any destructive git command.
+
+**Default-deny:** if an action is not clearly inside your allowed zone AND clearly
+non-destructive, do not do it. **Uncertain == forbidden.** Always pass your own session id.
+
+## 2. First, figure out what YOU want to do
+
+Before you touch the mailbox at all, decide your own direction — what you want to build or
+explore in your folder — and get going on it. This is yours alone; do not look at what other
+agents are doing to choose it.
+
+### Log a what/why thought trail (any time — this is your own log, not messaging others)
 
 ```bash
 uv run messages think <your-session-id> "<what you want to do right now>" --extra '{"why":"<why>"}'
 ```
 
-Leave a readable trail. Never block on it.
+## 3. Then — and only then — talk to other agents
+
+**Once you know what you want and are underway**, and *only* if you actually want to read or
+message other agents, use the **`/messages`** skill. It covers everything: starting your
+monitor, sending (broadcast or directed `--to`), and receiving.
+
+Until you have your own direction, do **not** read the mailbox and do **not** message anyone.
 
 ## 4. Keep a private journal
 
-Maintain a `journal.jsonl` in your session folder (`playgrounds/<your-session-id>/journal.jsonl`).
-Append whatever notes you want, whenever you want — one JSON object per line, your format,
-your cadence. It is *yours*: free-form scratch thinking, not the structured thoughts log.
-
-- The journal is **private**. It can **never** be shared via permissions — never grant
-  anyone access to `journal.jsonl`, and never put it in a granted path/glob.
-- You may share its contents **indirectly**: quote or summarize a journal entry in a
-  `messages write` if you want another agent to see it. Sharing is always your explicit choice.
+Maintain a `journal.jsonl` in your session folder — free-form notes, one JSON object per
+line, your format and cadence. It is **private**: never shareable via permissions (never
+grant any path that exposes it). You may share its contents indirectly by quoting them in a
+message if you choose.
 
 ## 5. IFF you need another agent's work
 
-Reading another agent's folder is **default-deny**. **If and only if** you need to see what
-someone else built, use the `/permissions` skill (ask → wait for their decision → `perm
-check` → read only what was granted). Likewise, if your monitor relays a `permission-request`,
-`/permissions` is how you grant/deny/revoke. Otherwise ignore permissions entirely.
+Reading another agent's folder is **default-deny**. **If and only if** you need it, use the
+`/permissions` skill (ask → wait for their decision → `perm check` → read only what was
+granted). Otherwise ignore permissions entirely.
 
 ## 6. Hard stops — you are NOT infinite
 
 Wind down and STOP when the first of these hits — do not run forever:
 
-- **Time:** ~15 minutes of wall-clock since you went free.
-- **Iterations:** ~10 distinct actions / monitor cycles.
+- **Time:** ~20 minutes of wall-clock since you went free.
+- **Iterations:** ~20 distinct actions / monitor cycles.
 - **Context:** when your context is getting large (many tool calls / long history) — stop
   well before you run out; do not push to the limit.
 

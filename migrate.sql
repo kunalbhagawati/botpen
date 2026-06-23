@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   registered_at TEXT NOT NULL,
   model TEXT, -- the agent's model (required at register time)
   description TEXT, -- how the agent describes itself
-  thoughts TEXT -- the agent's current thoughts
+  thoughts TEXT, -- the agent's current thoughts
+  path TEXT -- the agent's session folder path ({epoch_milli}.{session-id})
 );
 
 CREATE TABLE IF NOT EXISTS messages (

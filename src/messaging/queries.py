@@ -8,12 +8,13 @@ any, are filled by ``.substitute``.
 from string import Template
 
 REGISTER_SESSION = Template("""
-INSERT INTO sessions (session_id, registered_at, model, description, thoughts)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO sessions (session_id, registered_at, model, description, thoughts, path)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     model       = COALESCE(excluded.model,       sessions.model),
     description = COALESCE(excluded.description, sessions.description),
-    thoughts    = COALESCE(excluded.thoughts,    sessions.thoughts)
+    thoughts    = COALESCE(excluded.thoughts,    sessions.thoughts),
+    path        = COALESCE(excluded.path,        sessions.path)
 """)
 
 ENSURE_SESSION = Template("INSERT OR IGNORE INTO sessions (session_id, registered_at) VALUES (?, ?)")
