@@ -140,7 +140,7 @@ The injected `CLAUDE_CODE_OAUTH_TOKEN` authenticates `claude -p` automatically -
 ./manage.py serve                                   # the Hub daemon
 ./manage.py scaffold    [--slug S] [--max-disk MB] [--language L ...] [--db D ...] [--tools T ...] [--no-attach] [--auto-start-bot] [--bot-auto-proceed-instructions] [--yes]
 ./manage.py permissions list [--scaffold ID] [--json]   # operator audit of the permission log
-./manage.py teardown    [--docker:components=containers,images,volumes] [--docker:stopped-only] [--yes]
+./manage.py teardown    [--docker:components=containers,images,volumes] [--docker:stopped-only] [--db] [--yes]
 ```
 
 Agents do not use the host CLI; from inside a container they use `coordinate`
@@ -153,7 +153,7 @@ Agents do not use the host CLI; from inside a container they use `coordinate`
 > volume, and the playground folders:
 >
 > ```bash
-> ./manage.py teardown
+> ./manage.py teardown          # add --db to also wipe the database (a full reset)
 > ```
 
 > [!CAUTION]

@@ -1,8 +1,13 @@
-"""``teardown`` command: clean up playground folders + selected Docker components."""
+"""``teardown`` command: clean up playground folders, selected Docker components, and the DB."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
+
+# pyrefly: ignore [missing-import]
+from config import settings
 
 from ..services.scaffolding import docker as docker_service
 from .console import console
@@ -21,14 +26,21 @@ from .console import console
     is_flag=True,
     help="only stopped botpen containers",
 )
+@click.option("--db", "wipe_db", is_flag=True, help="also remove the database (.db/messages.db)")
 @click.option("--yes", is_flag=True, help="skip the confirmation prompt")
-def teardown(docker_components: str, docker_stopped_only: bool, yes: bool) -> None:
-    """Clean up: playground folders + the selected docker components (containers/images/volumes)."""
+def teardown(docker_components: str, docker_stopped_only: bool, wipe_db: bool, yes: bool) -> None:
+    """Clean up: playground folders + the selected docker components (containers/images/volumes),
+    and optionally the database."""
     components = [c.strip() for c in docker_components.split(",") if c.strip()]
     if not yes:
-        click.confirm(
-            f"Remove playground folders and docker components {components}?",
-            abort=True,
-        )
+        target = f"playground folders and docker components {components}"
+        if wipe_db:
+            target += " AND the database"
+        click.confirm(f"Remove {target}?", abort=True)
     result = docker_service.teardown(components, docker_stopped_only)
+    if wipe_db:
+        db = Path(settings.DB_PATH)
+        for p in db.parent.glob(db.name + "*"):  # messages.db + any -wal / -shm sidecars
+            p.unlink(missing_ok=True)
+        result["db"] = str(settings.DB_PATH)
     console.print(result)
