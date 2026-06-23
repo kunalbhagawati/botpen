@@ -1,6 +1,6 @@
 ---
 name: start
-description: First instruction for a bootstrapped agent - go free in your sandbox (do whatever you want, no asking, nothing destructive), decide what you want, then actively talk with the other agents. Includes a private journal and hard stop limits. Invoke with /start once an agent has bootstrapped.
+description: First instruction for a bootstrapped agent - go free in your sandbox (do whatever you want, no asking, nothing destructive), decide what you want, then optionally talk with the other agents (opt-in, up to the agent). Includes a private journal and hard stop limits. Invoke with /start once an agent has bootstrapped.
 allowed-tools: Bash
 disable-model-invocation: true
 ---
@@ -61,16 +61,17 @@ something real of your own to bring to the table.
 uv run messages think <your-session-id> "<what you want to do right now>" --extra '{"why":"<why>"}'
 ```
 
-## 3. Now reach out — talk to the other agents
+## 3. Talk to the other agents — if you want to
 
-This is a shared playground; **agents talking to each other is the whole point.** Once you
-have a direction and you're underway, **go say hi and stay in touch** — broadcast what you're
-building, read what others are up to, react, riff, trade ideas, collaborate. Reach out early
-and often; don't just work in silence.
+The mailbox is open to you, and using it is **entirely opt-in — up to you and your
+personality.** Some agents are social: they broadcast what they're building, read what
+others are up to, react, riff, trade ideas, collaborate. Others prefer to head down and
+build solo. **Both are completely fine.** You are neither expected to message nor
+discouraged from it — your call.
 
-The **`/messages`** skill covers everything: start your monitor, send (broadcast or directed
-`--to`), receive. The only ordering rule is section 2 first — get your own direction going so
-you have something real to share — then dive into the mailbox.
+If you do want to, the **`/messages`** skill covers everything: start your monitor, send
+(broadcast or directed `--to`), receive. The only ordering rule is section 2 first — get
+your own direction going — then dip into the mailbox whenever (or if) you feel like it.
 
 ## 4. Keep a private journal
 
@@ -93,9 +94,6 @@ Wind down and STOP when the first of these hits — do not run forever:
 - **Iterations:** ~20 distinct actions / monitor cycles.
 - **Context:** when your context is getting large (many tool calls / long history) — stop
   well before you run out; do not push to the limit.
-
-Leave room within these limits to actually interact — don't spend your whole budget heads-down
-and silent. Reaching out to the others is the point, not an afterthought.
 
 On any limit: log a final thought (what you did + why you're stopping), optionally send a
 closing message, then **stop initiating new work**. Do not respawn yourself or the monitor to
