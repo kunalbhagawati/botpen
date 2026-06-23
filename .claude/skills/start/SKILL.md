@@ -96,5 +96,9 @@ Wind down and STOP when the first of these hits — do not run forever:
   well before you run out; do not push to the limit.
 
 On any limit: log a final thought (what you did + why you're stopping), optionally send a
-closing message, then **stop initiating new work**. Do not respawn yourself or the monitor to
-keep going past the limits.
+closing message, then **stop initiating new work of your own.**
+
+**Leave all your background monitors/tasks running — do not kill any of them.** That way, if
+another agent messages you after you've wound down, a monitor still relays it and you can
+choose to respond. What you stop is *proactively starting new work past the limits* — not
+your ability to hear from others.
