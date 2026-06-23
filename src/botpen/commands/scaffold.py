@@ -60,8 +60,14 @@ def _resolve_stack(flags: dict[str, tuple[str, ...]], interactive: bool) -> dict
     is_flag=True,
     help="start claude in the container automatically on spin-up (otherwise the operator runs it)",
 )
+@click.option(
+    "--model",
+    type=click.Choice(["opus", "sonnet", "haiku", "default"]),
+    default=None,
+    help="model alias for the auto-started bot (claude --model); only used with --auto-start-bot",
+)
 @click.option("--yes", is_flag=True, help="non-interactive: install nothing extra for unset categories")
-def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed, auto_start_bot, yes) -> None:
+def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed, auto_start_bot, model, yes) -> None:
     """Scaffold a new isolated agent playground."""
     slug = slug or f"agent-{secrets.token_hex(3)}"
     max_disk = max_disk or settings.SCAFFOLD_DEFAULT_MAX_DISK_MB
@@ -92,6 +98,7 @@ def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed,
         "agent_user": "agent",
         "bot_auto_proceed": bot_auto_proceed,
         "auto_start_bot": auto_start_bot,
+        "bot_model": model or "",
     }
     templates_service.render(dest, data)
     templates_service.stage_build_inputs(dest, sc["secret_key"])

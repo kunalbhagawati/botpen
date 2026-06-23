@@ -101,7 +101,7 @@ It is a secret - `.env.local` is gitignored; never commit it.
    ./manage.py scaffold                                   # interactive stack picker
    ./manage.py scaffold --language python --db redis      # non-interactive
    ./manage.py scaffold --slug alice --no-attach          # run detached
-   ./manage.py scaffold --auto-start-bot --bot-auto-proceed-instructions   # fully autonomous
+   ./manage.py scaffold --auto-start-bot --bot-auto-proceed-instructions --model opus   # fully autonomous
    ```
 
    (`./manage.py ...` and `uv run manage.py ...` are equivalent - the shebang routes through uv.)
@@ -138,7 +138,7 @@ The injected `CLAUDE_CODE_OAUTH_TOKEN` authenticates `claude -p` automatically -
 ```
 ./manage.py db          setup [--reset]
 ./manage.py serve                                   # the Hub daemon
-./manage.py scaffold    [--slug S] [--max-disk MB] [--language L ...] [--db D ...] [--tools T ...] [--no-attach] [--auto-start-bot] [--bot-auto-proceed-instructions] [--yes]
+./manage.py scaffold    [--slug S] [--max-disk MB] [--language L ...] [--db D ...] [--tools T ...] [--no-attach] [--auto-start-bot] [--bot-auto-proceed-instructions] [--model opus|sonnet|haiku|opusplan|default] [--yes]
 ./manage.py permissions list [--scaffold ID] [--json]   # operator audit of the permission log
 ./manage.py teardown    [--docker:components=containers,images,volumes] [--docker:stopped-only] [--db] [--yes]
 ```

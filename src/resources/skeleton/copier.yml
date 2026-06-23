@@ -81,3 +81,8 @@ auto_start_bot:
   type: bool
   help: "start claude automatically on spin-up (otherwise the operator runs it)"
   default: false
+
+bot_model:
+  type: str
+  help: "model for the auto-started bot (claude --model); empty = claude default"
+  default: ""
