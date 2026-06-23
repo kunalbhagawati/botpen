@@ -25,6 +25,7 @@ from thriftpy2.rpc import make_aio_server
 # pyrefly: ignore [missing-import]
 from config import settings
 
+from ..core.db import ensure_db
 from ..stack_schema import SCAFFOLD_STACK_EXAMPLE, SCAFFOLD_STACK_SCHEMA
 
 from ..services import messages as messages_service
@@ -315,14 +316,15 @@ class Hub:
 @click.command()
 def serve() -> None:
     """Run the Hub daemon (Thrift RPC + WebSocket push). Foreground, Ctrl-C to stop."""
+    ensure_db()  # self-heal the schema if it was wiped (e.g. teardown --db)
     hub = Hub()
     idl = thriftpy2.load(str(_IDL_PATH), module_name="hub_thrift")
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    # Thrift binds via run_until_complete internally (needs the loop idle); websockets.serve needs
-    # the loop running - so bind Thrift now, start websockets as a task once run_forever begins.
+    # Thrift binds via run_until_complete internally (needs the loop idle), so bind it first; the
+    # WebSocket server is then bound eagerly below (also before run_forever).
     thrift_server = make_aio_server(idl.Hub, hub, settings.DAEMON_HOST, settings.DAEMON_PORT, loop=loop)
     thrift_server.init_server()
 
@@ -345,7 +347,10 @@ def serve() -> None:
             except Exception as e:
                 click.echo(json.dumps({"event": "reaper-error", "error": str(e)}))
 
-    loop.create_task(_start_ws())
+    # Bind the WebSocket server eagerly (not as a fire-and-forget task) so a bind failure - e.g.
+    # the WS port already in use by another Hub - raises here and aborts serve, instead of being a
+    # swallowed task exception that leaves the daemon half-running on Thrift only.
+    loop.run_until_complete(_start_ws())
     loop.create_task(_reaper())
 
     click.echo(json.dumps({

@@ -13,7 +13,7 @@ from functools import wraps
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import event
+from sqlalchemy import event, inspect
 from sqlmodel import Session as DBSession
 from sqlmodel import SQLModel, create_engine
 
@@ -112,6 +112,14 @@ def setup_db() -> None:
     settings.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     _setup()
     command.upgrade(_alembic_config(), "head")
+
+
+def ensure_db() -> None:
+    """Create + migrate the DB if the schema is absent (e.g. after `teardown --db`), so commands
+    that need it (scaffold, serve) self-heal instead of crashing on a missing table. Cheap no-op
+    when the schema is already present."""
+    if not settings.DB_PATH.exists() or not inspect(_engine).has_table("scaffolds"):
+        setup_db()
 
 
 def reset_db() -> None:

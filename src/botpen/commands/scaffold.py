@@ -17,6 +17,7 @@ import questionary
 # pyrefly: ignore [missing-import]
 from config import settings
 
+from ..core.db import ensure_db
 from ..stack_catalog import SCAFFOLD_STACK_CATALOG
 from ..services.scaffolding import docker as docker_service
 from ..services.scaffolding import scaffold as scaffold_service
@@ -76,6 +77,7 @@ def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed,
     interactive = not yes and not any_flag and sys.stdin.isatty()
     stack = _resolve_stack(flags, interactive)
 
+    ensure_db()  # self-heal the schema if it was wiped (e.g. teardown --db)
     sc = scaffold_service.create_scaffold(slug, max_disk, stack)
     # Durable, scaffold-level folder: epoch.scaffold_id.slug (session_id is per-incarnation and
     # unknown at scaffold time, so it is not part of the folder name).
