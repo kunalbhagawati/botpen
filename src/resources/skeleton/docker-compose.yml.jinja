@@ -1,0 +1,20 @@
+name: botpen-{{ slug }}
+
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: botpen-agent-{{ slug }}
+    container_name: botpen-{{ slug }}
+    env_file: .env
+    stdin_open: true
+    tty: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - {{ shared_volume }}:/shared
+
+volumes:
+  {{ shared_volume }}:
+    external: true

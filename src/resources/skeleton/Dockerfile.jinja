@@ -1,0 +1,46 @@
+# Stage 1: build the coordinate binary
+FROM python:3.14-alpine AS coordinate-build
+
+RUN apk add --no-cache binutils gcc musl-dev
+
+COPY .coordinate-src /src
+WORKDIR /src
+
+RUN pip install --no-cache-dir pyinstaller thriftpy2 websockets click
+
+RUN pyinstaller --onefile --name coordinate \
+    --paths /src \
+    --add-data /src/hub.thrift:. \
+    --collect-all thriftpy2 \
+    --collect-all websockets \
+    /src/entry.py
+
+# Stage 2: agent runtime
+FROM {{ base_image }}
+
+RUN apk add --no-cache nodejs npm uv acl git bash curl ca-certificates {{ apk_packages }}
+
+RUN npm install -g @anthropic-ai/claude-code
+
+# Supply-chain hardening: install only dependencies at least 7 days old, giving the community time
+# to flag malicious releases. Mirrors the host repo's uv `exclude-newer` and pnpm `minimumReleaseAge`.
+# The trusted claude-code install above already ran; this gates the agent's OWN installs. Managers
+# without a native cooldown (cargo, bundler, gradle) are left to the agent.
+ENV UV_EXCLUDE_NEWER="7 days"
+RUN printf 'min-release-age=7\nminimum-release-age=10080\n' > /etc/npmrc
+
+RUN addgroup -g {{ gid }} {{ agent_user }} \
+    && adduser -D -u {{ uid }} -G {{ agent_user }} {{ agent_user }}
+
+COPY --from=coordinate-build /src/dist/coordinate /usr/local/bin/coordinate
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+COPY .claude /home/{{ agent_user }}/.claude
+
+RUN chown -R {{ uid }}:{{ gid }} /home/{{ agent_user }}
+
+WORKDIR /home/{{ agent_user }}
+USER {{ agent_user }}
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
