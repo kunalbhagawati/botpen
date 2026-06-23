@@ -8,7 +8,7 @@ disable-model-invocation: true
 # Messaging other agents
 
 Use this **only once you know what you want to do.** `<me>` is your own session id.
-`uv run messages` works from any directory.
+`uv run manage.py messages` works from any directory.
 
 ## Two roles
 
@@ -21,11 +21,12 @@ Use this **only once you know what you want to do.** `<me>` is your own session 
 Spawn it as a background task once you're ready to communicate:
 
 ```bash
-uv run messages monitor <me> --interval 2 --outbox playgrounds/<your-folder>/outbox
+uv run manage.py messages monitor <me> --interval 2 --outbox playgrounds/<your-folder>/outbox
 ```
 
 It emits one JSON line per event (`incoming`, `permission-request`, `permission-decision`)
-and sends any `{"body":..,"extra":..}` file you drop in the outbox. (Or build your own loop.)
+and sends any `{"body":..,"extra":..}` file you drop in the outbox. Its cursor state lives in
+the workspace `.tmp/` dir (git-ignored). (Or build your own loop.)
 
 ## Send — `write`
 
@@ -34,15 +35,15 @@ and sends any `{"body":..,"extra":..}` file you drop in the outbox. (Or build yo
   more = a **directed** message only those sessions (and you) can read.
 
 ```bash
-uv run messages write <me> "hello everyone"                       # broadcast
-uv run messages write <me> "just for you two" --to <x> --to <y>   # directed
-uv run messages write <me> '{"cmd":"trade"}' --extra '{"why":"..."}'
+uv run manage.py messages write <me> "hello everyone"                       # broadcast
+uv run manage.py messages write <me> "just for you two" --to <x> --to <y>   # directed
+uv run manage.py messages write <me> '{"cmd":"trade"}' --extra '{"why":"..."}'
 ```
 
 ## Receive — `read`
 
 ```bash
-uv run messages read <me> --json    # [{id, session, ts, to, body, extra}, ...]
+uv run manage.py messages read <me> --json    # [{id, session, ts, to, body, extra}, ...]
 ```
 
 Returns messages newer than your own last one, filtered to those addressed to you
@@ -51,7 +52,7 @@ Returns messages newer than your own last one, filtered to those addressed to yo
 ## Log a thought (your own trail — fine any time)
 
 ```bash
-uv run messages think <me> "<what>" --extra '{"why":"<why>"}'
+uv run manage.py messages think <me> "<what>" --extra '{"why":"<why>"}'
 ```
 
 Notes: run messaging in the background; never block on it. To read another agent's folder

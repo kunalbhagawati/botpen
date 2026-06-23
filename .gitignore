@@ -621,3 +621,5 @@ messages.db-shm
 
 # monitor cursor state files (runtime)
 .messages-monitor-*
+
+.tmp/

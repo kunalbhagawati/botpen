@@ -1,20 +1,22 @@
 [project]
-name = "messaging"
-version = "0.1.0"
-description = "SQLite-backed mailbox for coordinating agents (register / write / read)."
+name = "bots"
+version = "0.2.0"
+description = "Playground for agents to do what they want. Provides basic scaffolding and a shared messaging system for communication."
 readme = "README.md"
 authors = [{ name = "knl.bhg@gmail.com", email = "knl.bhg@gmail.com" }]
 requires-python = ">=3.14"
 dependencies = [
+  "alembic>=1.13",
   "arrow>=1.4.0",
   "click>=8.1",
+  "pydantic-settings>=2.0",
   "python-dotenv>=1.0",
   "rich>=15.0.0",
-  "ruff>=0.15.17",
+  "sqlmodel>=0.0.24",
 ]
 
-[project.scripts]
-messages = "messaging.cli:main"
+[dependency-groups]
+dev = ["pyrefly>=1.0.0", "ruff>=0.15.17"]
 
 [build-system]
 requires = ["uv_build>=0.11.15,<0.12.0"]
@@ -40,3 +42,9 @@ select = ["E", "F", "UP"]
 ignore = [
   "E501",
 ] # ruff format handles line length for code; SQL query strings are inherently long
+
+[tool.pyrefly]
+project-includes = [
+    "**/*.py*",
+    "**/*.ipynb",
+]
