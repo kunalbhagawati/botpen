@@ -22,6 +22,9 @@ dependencies = [
 [dependency-groups]
 dev = ["pyrefly>=1.0.0", "ruff>=0.15.17"]
 
+[project.scripts]
+playground = "botpen._entrypoints:playground_main"
+
 [build-system]
 requires = ["uv_build>=0.11.15,<0.12.0"]
 build-backend = "uv_build"
