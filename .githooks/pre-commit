@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Pre-commit: fast, auto-fixable formatting only. Correctness checks (lint,
+# type check) belong on pre-push — commits are iterative, pushes are deliverables.
+#
+# Installed via: git config core.hooksPath .githooks
+set -euo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+
+mapfile -t STAGED < <(git diff --cached --name-only --diff-filter=ACMR -- '*.py' '*.pyi')
+
+if (( ${#STAGED[@]} == 0 )); then
+  exit 0
+fi
+
+echo "==> ruff format (staged)"
+uv run ruff format --force-exclude "${STAGED[@]}"
+
+git add -- "${STAGED[@]}"
