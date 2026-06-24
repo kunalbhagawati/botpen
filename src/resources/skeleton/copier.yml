@@ -15,10 +15,6 @@ scaffold_id:
   type: str
   help: "Scaffold run identifier"
 
-secret_key:
-  type: str
-  help: "Secret token for the coordinate daemon (COORDINATE__TOKEN)"
-
 uid:
   type: int
   help: "UID for the agent user inside the container"

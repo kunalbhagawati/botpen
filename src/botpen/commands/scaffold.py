@@ -19,6 +19,7 @@ from config import settings
 
 from ..core.db import ensure_db
 from ..stack_catalog import SCAFFOLD_STACK_CATALOG
+from ..services import hub as hub_service
 from ..services.scaffolding import docker as docker_service
 from ..services.scaffolding import scaffold as scaffold_service
 from ..services.scaffolding import templates as templates_service
@@ -67,8 +68,13 @@ def _resolve_stack(flags: dict[str, tuple[str, ...]], interactive: bool) -> dict
     default=None,
     help="default claude model in the container (written to ~/.claude/settings.json; applies to both the auto-started bot and an attached operator)",
 )
+@click.option(
+    "--no-serve", "no_serve", is_flag=True, help="do not auto-start the Hub daemon (assume it is already running)"
+)
 @click.option("--yes", is_flag=True, help="non-interactive: install nothing extra for unset categories")
-def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed, auto_start_bot, model, yes) -> None:
+def scaffold(
+    slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed, auto_start_bot, model, no_serve, yes
+) -> None:
     """Scaffold a new isolated agent playground."""
     slug = slug or f"agent-{secrets.token_hex(3)}"
     max_disk = max_disk or settings.SCAFFOLD_DEFAULT_MAX_DISK_MB
@@ -78,6 +84,8 @@ def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed,
     stack = _resolve_stack(flags, interactive)
 
     ensure_db()  # self-heal the schema if it was wiped (e.g. teardown --db)
+    if not no_serve and hub_service.ensure_hub():  # an auto-started bot needs the Hub reachable
+        console.print("  [green]Hub started[/green] in the background (logs: .hub.log)")
     sc = scaffold_service.create_scaffold(slug, max_disk, stack)
     # Durable, scaffold-level folder: epoch.scaffold_id.slug (session_id is per-incarnation and
     # unknown at scaffold time, so it is not part of the folder name).
@@ -85,7 +93,6 @@ def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed,
     data = {
         "slug": slug,
         "scaffold_id": sc["scaffold_id"],
-        "secret_key": sc["secret_key"],
         "uid": sc["uid"],
         "gid": sc["gid"],
         "max_disk_mb": max_disk,
@@ -104,7 +111,9 @@ def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed,
     }
     templates_service.render(dest, data)
     templates_service.stage_build_inputs(dest, sc["secret_key"])
-    console.print(f"[green]scaffolded[/green] [bold]{slug}[/bold]  stack={stack}  uid/gid={sc['uid']}  disk={max_disk}MB")
+    console.print(
+        f"[green]scaffolded[/green] [bold]{slug}[/bold]  stack={stack}  uid/gid={sc['uid']}  disk={max_disk}MB"
+    )
 
     container = f"botpen-{slug}"
     console.print("  building image + starting container (first build pulls + compiles, give it a minute) ...")
@@ -112,8 +121,19 @@ def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed,
     docker_service.ensure_agent_dir(sc["scaffold_id"], sc["uid"], sc["gid"])
     docker_service.build_and_up(dest)
     scaffold_service.set_status(sc["scaffold_id"], "running", container_name=container)
-    console.print(f"  [green]running[/green] [bold]{container}[/bold] - register inside with `coordinate register <session-id>`")
-    if no_attach:
-        console.print(f"  attach with: docker exec -it {container} bash")
+    # An auto-started bot runs claude itself as the container's main process - attaching would just
+    # drop the operator into a second, idle shell, so we don't attach (it would look like nothing
+    # happened). Manual mode (no auto-start) attaches so the operator can drive claude themselves.
+    if auto_start_bot:
+        console.print(
+            f"  [green]running[/green] [bold]{container}[/bold] - bot started itself; watch with `docker exec -it {container} bash`"
+        )
+    elif no_attach:
+        console.print(
+            f"  [green]running[/green] [bold]{container}[/bold] - attach with `docker exec -it {container} bash`"
+        )
     else:
+        console.print(
+            f"  [green]running[/green] [bold]{container}[/bold] - register inside with `coordinate register <session-id>`"
+        )
         docker_service.attach(container)
