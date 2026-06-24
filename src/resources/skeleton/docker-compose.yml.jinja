@@ -10,10 +10,16 @@ services:
     env_file: .env
     stdin_open: true
     tty: true
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - {{ shared_volume }}:/shared
+    networks:
+      # Shared bridge network with the Hub - the agent reaches it by name (hub:8787 / hub:8788).
+      - botpen
+
+networks:
+  botpen:
+    external: true
+    name: botpen
 
 volumes:
   {{ shared_volume }}:

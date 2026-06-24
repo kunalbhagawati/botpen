@@ -1,0 +1,50 @@
+# botpen Hub - the control-plane service. Brought up by `manage.py serve` (via ensure_hub).
+# Mirrors the signal-builder pattern: a shared external `botpen` bridge network that the Hub and
+# every agent container join, so they resolve each other by name (agents reach the Hub at hub:8787).
+name: botpen-hub
+
+# Same env cascade as the host CLI (.env -> .env.local). The Hub reads the same config the operator
+# does, with a couple of in-container overrides below.
+x-env-files: &env-files
+  - .env
+  - path: .env.local
+    required: false
+
+services:
+  hub:
+    build:
+      context: .
+      dockerfile: Dockerfile.hub
+    image: botpen-hub
+    container_name: botpen-hub
+    env_file: *env-files
+    environment:
+      # DB on the Hub-only volume (the macOS host can't reach it - that's the point); bind on all
+      # interfaces so agents on the botpen network and the host-published ports both reach it.
+      - MESSAGES_DB=/data/messages.db
+      - DAEMON_HOST=0.0.0.0
+    ports:
+      - "${DAEMON_PORT:-8787}:8787"
+      - "${DAEMON_WS_PORT:-8788}:8788"
+    volumes:
+      # Spawn agent containers on the host daemon (docker-out-of-docker).
+      - /var/run/docker.sock:/var/run/docker.sock
+      # DB lives here, mounted only into the Hub - agents never see it.
+      - botpen-db:/data
+      # Shared volume: the Hub applies ACLs on it directly (no helper container).
+      - botpen_shared:/shared
+    networks:
+      - botpen
+    restart: unless-stopped
+
+networks:
+  botpen:
+    external: true
+    name: botpen
+
+volumes:
+  botpen-db:
+    name: botpen-db
+  botpen_shared:
+    name: botpen_shared
+    external: true

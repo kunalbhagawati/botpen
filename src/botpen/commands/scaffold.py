@@ -100,7 +100,7 @@ def scaffold(
         "installed": ", ".join(k for keys in stack.values() for k in keys) or "nothing extra (a blank Alpine base)",
         "oauth_token": settings.CLAUDE_CODE_OAUTH_TOKEN,
         "base_image": settings.SCAFFOLD_BASE_IMAGE,
-        "daemon_host": "host.docker.internal",
+        "daemon_host": "hub",  # the agent reaches the Hub by name on the shared botpen network
         "daemon_thrift_port": settings.DAEMON_PORT,
         "daemon_ws_port": settings.DAEMON_WS_PORT,
         "shared_volume": settings.SHARED_VOLUME_NAME,
