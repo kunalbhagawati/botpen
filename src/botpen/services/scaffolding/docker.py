@@ -1,8 +1,8 @@
-"""Docker provisioning for scaffolded agents: shared volume, build+run, attach, and host-applied
-ACLs on the shared volume.
+"""Docker provisioning for scaffolded agents: shared volume, build+run, attach, and ACLs.
 
-Named volumes live inside the Docker VM, so ACLs are applied by a short-lived helper container
-that mounts the shared volume - the host never touches the volume's filesystem directly.
+This module runs INSIDE the Hub container, which mounts the shared volume at /shared and carries the
+acl tools - so volume/ACL maintenance runs directly (no throwaway helper container). Agent
+containers are built and run through the mounted docker socket (docker-out-of-docker).
 """
 
 from __future__ import annotations
@@ -45,23 +45,9 @@ def attach(container_name: str) -> None:
 
 
 def _helper(script: str) -> None:
-    """Run `script` in a throwaway container with the shared volume mounted at /shared."""
-    subprocess.run(
-        [
-            "docker",
-            "run",
-            "--rm",
-            "-v",
-            f"{settings.SHARED_VOLUME_NAME}:/shared",
-            settings.ACL_HELPER_IMAGE,
-            "sh",
-            "-c",
-            f"apk add --no-cache acl >/dev/null 2>&1 && {script}",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    """Run a shared-volume maintenance command directly. The Hub container mounts the shared volume
+    at /shared and ships the acl tools, so no throwaway helper container is needed."""
+    subprocess.run(["sh", "-c", script], check=True, capture_output=True, text=True)
 
 
 def _walk(node: dict, owner_scaffold_id: str, peer_uid: int, base: str = "") -> list[str]:
@@ -166,9 +152,10 @@ def teardown(components: list[str], stopped_only: bool = False) -> dict:
         removed_containers = names
 
     if "images" in components:
+        # botpen-* catches the agent images (botpen-agent-<slug>) and the Hub image (botpen-hub).
         imgs = set(
             subprocess.run(
-                ["docker", "images", "--filter", "reference=botpen-agent*", "--format", "{{.Repository}}:{{.Tag}}"],
+                ["docker", "images", "--filter", "reference=botpen-*", "--format", "{{.Repository}}:{{.Tag}}"],
                 capture_output=True,
                 text=True,
             ).stdout.split()
@@ -180,6 +167,10 @@ def teardown(components: list[str], stopped_only: bool = False) -> dict:
     if "volumes" in components:
         subprocess.run(["docker", "volume", "rm", "-f", settings.SHARED_VOLUME_NAME], capture_output=True)
         removed_volume = settings.SHARED_VOLUME_NAME
+
+    # The shared `botpen` network (best-effort - only removable once its containers are gone, which
+    # the `containers` component above handles, the Hub container included via the botpen- filter).
+    subprocess.run(["docker", "network", "rm", "botpen"], capture_output=True)
 
     playgrounds = settings.WORKING_DIR / "playgrounds"
     pg = 0
