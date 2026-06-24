@@ -132,9 +132,11 @@ def teardown(components: list[str], stopped_only: bool = False) -> dict:
     (values: ``containers``, ``images``, ``volumes``):
     - ``containers``: list ``botpen-`` containers (exited-only when ``stopped_only``),
       then ``docker rm -f`` each.
-    - ``images``: ``docker rmi -f`` every ``botpen-agent*`` image.
-    - ``volumes``: ``docker volume rm -f`` the shared volume.
+    - ``images``: ``docker rmi -f`` every ``botpen-*`` image (agents + the Hub).
+    - ``volumes``: remove every ``botpen`` volume except the DB (shared volume + any stale
+      per-agent workspace volumes from earlier models); the DB volume is gated behind ``--db``.
 
+    Also removes every ``botpen`` network (the shared net + any per-project ``_default`` leftovers).
     Returns a summary dict with removal counts.
     """
     ps_cmd = ["docker", "ps", "-a", "--filter", "name=botpen-", "--format", "{{.Names}}"]
@@ -143,7 +145,8 @@ def teardown(components: list[str], stopped_only: bool = False) -> dict:
 
     removed_containers: list[str] = []
     removed_images: list[str] = []
-    removed_volume: str | None = None
+    removed_volumes: list[str] = []
+    removed_networks: list[str] = []
 
     if "containers" in components:
         names = subprocess.run(ps_cmd, capture_output=True, text=True).stdout.split()
@@ -165,12 +168,24 @@ def teardown(components: list[str], stopped_only: bool = False) -> dict:
         removed_images = list(imgs)
 
     if "volumes" in components:
-        subprocess.run(["docker", "volume", "rm", "-f", settings.SHARED_VOLUME_NAME], capture_output=True)
-        removed_volume = settings.SHARED_VOLUME_NAME
+        # Every botpen volume EXCEPT the DB (gated behind --db in the command) - catches the shared
+        # volume and any stale per-agent workspace volumes from earlier models.
+        vols = subprocess.run(
+            ["docker", "volume", "ls", "-q", "--filter", "name=botpen"], capture_output=True, text=True
+        ).stdout.split()
+        for v in (v for v in vols if v != "botpen-db"):
+            subprocess.run(["docker", "volume", "rm", "-f", v], capture_output=True)
+            removed_volumes.append(v)
 
-    # The shared `botpen` network (best-effort - only removable once its containers are gone, which
-    # the `containers` component above handles, the Hub container included via the botpen- filter).
-    subprocess.run(["docker", "network", "rm", "botpen"], capture_output=True)
+    # Every botpen network (best-effort - the shared `botpen` net plus any per-project `_default`
+    # leftovers). Only removable once its containers are gone, which the `containers` component above
+    # handles (the Hub container included via the botpen- filter).
+    nets = subprocess.run(
+        ["docker", "network", "ls", "-q", "--filter", "name=botpen"], capture_output=True, text=True
+    ).stdout.split()
+    for n in nets:
+        if subprocess.run(["docker", "network", "rm", n], capture_output=True).returncode == 0:
+            removed_networks.append(n)
 
     playgrounds = settings.WORKING_DIR / "playgrounds"
     pg = 0
@@ -183,6 +198,7 @@ def teardown(components: list[str], stopped_only: bool = False) -> dict:
     return {
         "containers": len(removed_containers),
         "images": len(removed_images),
-        "volume": removed_volume,
+        "volumes": len(removed_volumes),
+        "networks": len(removed_networks),
         "playgrounds": pg,
     }
