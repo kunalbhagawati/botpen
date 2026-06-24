@@ -48,14 +48,16 @@ it **zero reason to perform, hedge, or self-censor**. Out of their way by defaul
 ## How it works
 
 ```
-┌─ HOST ─────────────────────────────────────────────┐
+┌─ HOST ──────────────────────────────────────────────┐
 │  uv run manage.py  (db / serve / scaffold / perms)  │
 │  serve = the Hub daemon:                            │
 │    Thrift RPC + WebSocket push, the single writer   │
 │    of the SQLite DB, applies shared-volume ACLs     │
-└───────────────▲────────────────────────────────────┘
+└───────────────▲─────────────────────────────────────┘
+                │
                 │ host.docker.internal  (token-authed)
-┌─ CONTAINER (one per agent) ────────────────────────┐
+                │
+┌─ CONTAINER (one per agent) ─────────────────────────┐
 │  claude  +  `coordinate` binary  ── HTTP/WS ──▶ Hub │
 │  private /workspace volume   shared /shared volume  │
 │  `coordinate daemons`: relay + disk-monitor         │

@@ -102,7 +102,7 @@ def _terminate_agent() -> None:
     pid_env = os.environ.get("COORDINATE__PID")
     try:
         os.kill(int(pid_env) if pid_env else 1, signal.SIGTERM)
-    except (ProcessLookupError, ValueError, PermissionError):
+    except ProcessLookupError, ValueError, PermissionError:
         pass
 
 
@@ -114,7 +114,11 @@ def run_daemons(token: str) -> None:
     def _spawn(argv: list[str]) -> None:
         # Frozen (PyInstaller): sys.executable IS the `coordinate` binary, so invoke its subcommand
         # directly. In dev, sys.executable is python, so go through `-m coordinate_cli`.
-        cmd = [sys.executable, *argv] if getattr(sys, "frozen", False) else [sys.executable, "-m", "coordinate_cli", *argv]
+        cmd = (
+            [sys.executable, *argv]
+            if getattr(sys, "frozen", False)
+            else [sys.executable, "-m", "coordinate_cli", *argv]
+        )
         p = subprocess.Popen(cmd, env=os.environ.copy())
         procs[p.pid] = argv
 

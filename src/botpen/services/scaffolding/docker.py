@@ -48,12 +48,19 @@ def _helper(script: str) -> None:
     """Run `script` in a throwaway container with the shared volume mounted at /shared."""
     subprocess.run(
         [
-            "docker", "run", "--rm",
-            "-v", f"{settings.SHARED_VOLUME_NAME}:/shared",
-            settings.ACL_HELPER_IMAGE, "sh", "-c",
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{settings.SHARED_VOLUME_NAME}:/shared",
+            settings.ACL_HELPER_IMAGE,
+            "sh",
+            "-c",
             f"apk add --no-cache acl >/dev/null 2>&1 && {script}",
         ],
-        check=True, capture_output=True, text=True,
+        check=True,
+        capture_output=True,
+        text=True,
     )
 
 
@@ -98,7 +105,8 @@ def reap_stopped(after_mins: int) -> list[str]:
     Returns the reaped slugs. Best-effort: a docker/parse error on one agent skips it, not the rest."""
     listed = subprocess.run(
         ["docker", "ps", "-a", "--filter", "status=exited", "--filter", "name=botpen-", "--format", "{{.Names}}"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).stdout.split()
     cutoff = arrow.utcnow().shift(minutes=-after_mins)
     playgrounds = settings.WORKING_DIR / "playgrounds"
@@ -106,7 +114,9 @@ def reap_stopped(after_mins: int) -> list[str]:
     for name in listed:
         slug = name.removeprefix("botpen-")
         finished = subprocess.run(
-            ["docker", "inspect", "-f", "{{.State.FinishedAt}}", name], capture_output=True, text=True,
+            ["docker", "inspect", "-f", "{{.State.FinishedAt}}", name],
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         try:
             if arrow.get(finished) > cutoff:  # stopped too recently - leave it
@@ -156,10 +166,13 @@ def teardown(components: list[str], stopped_only: bool = False) -> dict:
         removed_containers = names
 
     if "images" in components:
-        imgs = set(subprocess.run(
-            ["docker", "images", "--filter", "reference=botpen-agent*", "--format", "{{.Repository}}:{{.Tag}}"],
-            capture_output=True, text=True,
-        ).stdout.split())
+        imgs = set(
+            subprocess.run(
+                ["docker", "images", "--filter", "reference=botpen-agent*", "--format", "{{.Repository}}:{{.Tag}}"],
+                capture_output=True,
+                text=True,
+            ).stdout.split()
+        )
         for image in imgs:
             subprocess.run(["docker", "rmi", "-f", image], capture_output=True)
         removed_images = list(imgs)
