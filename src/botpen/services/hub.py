@@ -53,6 +53,8 @@ def ensure_hub() -> bool:
         return False
     ensure_network()
     subprocess.run(["docker", "volume", "create", settings.SHARED_VOLUME_NAME], capture_output=True)
+    # Host dir for the DB bind mount (./.db -> /data in the Hub), so file-based explorers can open it.
+    (settings.WORKING_DIR / ".db").mkdir(exist_ok=True)
     subprocess.run(
         ["docker", "compose", "-f", str(settings.WORKING_DIR / _HUB_COMPOSE), "up", "-d", "--build"],
         cwd=settings.WORKING_DIR,

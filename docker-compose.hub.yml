@@ -19,8 +19,8 @@ services:
     container_name: botpen-hub
     env_file: *env-files
     environment:
-      # DB on the Hub-only volume (the macOS host can't reach it - that's the point); bind on all
-      # interfaces so agents on the botpen network and the host-published ports both reach it.
+      # DB on the host bind mount (see volumes); bind the daemon on all interfaces so agents on the
+      # botpen network and the host-published ports both reach it.
       - MESSAGES_DB=/data/messages.db
       - DAEMON_HOST=0.0.0.0
     ports:
@@ -29,8 +29,10 @@ services:
     volumes:
       # Spawn agent containers on the host daemon (docker-out-of-docker).
       - /var/run/docker.sock:/var/run/docker.sock
-      # DB lives here, mounted only into the Hub - agents never see it.
-      - botpen-db:/data
+      # DB bind-mounted to the host ./.db so file-based explorers (DBCode / DataGrip) open it
+      # directly at <repo>/.db/messages.db. Requires non-WAL journal mode (set in core/db.py) -
+      # WAL's mmap'd -shm does not work over the Docker Desktop virtiofs bind; DELETE mode does.
+      - ./.db:/data
       # Shared volume: the Hub applies ACLs on it directly (no helper container).
       - botpen_shared:/shared
     networks:
@@ -43,8 +45,6 @@ networks:
     name: botpen
 
 volumes:
-  botpen-db:
-    name: botpen-db
   botpen_shared:
     name: botpen_shared
     external: true
