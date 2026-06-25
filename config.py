@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     SHARED_VOLUME_NAME: str
     SHARED_VOLUME_SIZE_GB: int
     SCAFFOLD_DEFAULT_MAX_DISK_MB: int
+    SCAFFOLD_DEFAULT_MODEL: str  # default claude model alias for scaffolded agents (opus/sonnet/haiku/default)
     SCAFFOLD_UID_BASE: int
     SCAFFOLD_GID_BASE: int
 

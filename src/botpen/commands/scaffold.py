@@ -65,8 +65,9 @@ def _resolve_stack(flags: dict[str, tuple[str, ...]], interactive: bool) -> dict
 @click.option(
     "--model",
     type=click.Choice(["opus", "sonnet", "haiku", "default"]),
-    default=None,
-    help="default claude model in the container (written to ~/.claude/settings.json; applies to both the auto-started bot and an attached operator)",
+    default=settings.SCAFFOLD_DEFAULT_MODEL,
+    show_default=True,
+    help="default claude model in the container (written to ~/.claude/settings.json; applies to both the auto-started bot and an attached operator). Default from SCAFFOLD_DEFAULT_MODEL in .env",
 )
 @click.option(
     "--no-serve", "no_serve", is_flag=True, help="do not auto-start the Hub daemon (assume it is already running)"
@@ -107,7 +108,7 @@ def scaffold(
         "agent_user": "agent",
         "bot_auto_proceed": bot_auto_proceed,
         "auto_start_bot": auto_start_bot,
-        "bot_model": model or "",
+        "bot_model": model or settings.SCAFFOLD_DEFAULT_MODEL,
     }
     templates_service.render(dest, data)
     templates_service.stage_build_inputs(dest, sc["secret_key"])
