@@ -21,11 +21,13 @@ def playground_main() -> None:
     # Import deferred until after path injection above
     from botpen.services.hub import exec_in_hub, running_in_hub  # noqa: PLC0415
 
-    # Inside the Hub container: run the command. On the host: provisioning needs the DB + docker
-    # socket, which live in the Hub container, so re-run there via `docker exec`.
-    if running_in_hub():
+    argv = sys.argv[1:]
+    # `setup` only creates the host-side DB file (./.db) + runs migrations - no Hub/docker needed, so
+    # it runs here. Everything else (start) needs the docker socket, which lives in the Hub container,
+    # so it re-runs there via `docker exec`.
+    if running_in_hub() or (argv and argv[0] == "setup"):
         from botpen.commands.playground import playground  # noqa: PLC0415
 
         playground()
         return
-    exec_in_hub(["/app/.venv/bin/playground", *sys.argv[1:]])
+    exec_in_hub(["/app/.venv/bin/playground", *argv])

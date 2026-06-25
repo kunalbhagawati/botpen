@@ -194,6 +194,15 @@ def playground() -> None:
 
 
 @playground.command()
+def setup() -> None:
+    """Create the DB (host ./.db/messages.db) and apply migrations (alembic upgrade head). Idempotent."""
+    from ..core.db import setup_db
+
+    setup_db()
+    console.print("[green]DB ready[/green] - schema at head")
+
+
+@playground.command()
 @click.option("-n", "--num-agents", "num_agents", required=True, type=int, help="number of agents to provision")
 @click.option(
     "-c",
