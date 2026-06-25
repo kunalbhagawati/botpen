@@ -47,8 +47,8 @@ def main() -> None:
     argv = sys.argv[1:]
     cmd = argv[0] if argv else ""
 
-    # Help / no command, and the host-side lifecycle commands, render in this process.
-    if not cmd or cmd.startswith("-") or cmd == "teardown":
+    # Help / no command renders in this process. (Cleanup moved to `playground clean`.)
+    if not cmd or cmd.startswith("-"):
         _run_local()
         return
 

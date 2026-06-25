@@ -22,10 +22,10 @@ def playground_main() -> None:
     from botpen.services.hub import exec_in_hub, running_in_hub  # noqa: PLC0415
 
     argv = sys.argv[1:]
-    # `setup` only creates the host-side DB file (./.db) + runs migrations - no Hub/docker needed, so
-    # it runs here. Everything else (start) needs the docker socket, which lives in the Hub container,
-    # so it re-runs there via `docker exec`.
-    if running_in_hub() or (argv and argv[0] == "setup"):
+    # `setup` (host-side DB file) and `clean` (removes the Hub container itself, so it can't run
+    # inside it) run here. Everything else (start) needs the docker socket, which lives in the Hub
+    # container, so it re-runs there via `docker exec`.
+    if running_in_hub() or (argv and argv[0] in ("setup", "clean")):
         from botpen.commands.playground import playground  # noqa: PLC0415
 
         playground()

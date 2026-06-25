@@ -18,6 +18,9 @@ from ..stack_catalog import SCAFFOLD_STACK_CATALOG
 from .console import console
 from .scaffold import scaffold
 from ..core.db import setup_db
+from config import settings
+
+from ..services.scaffolding import docker as docker_service
 
 # ---------------------------------------------------------------------------
 # Model choices - single source of truth; scaffold.py uses click.Choice inline
@@ -200,6 +203,36 @@ def setup() -> None:
 
     setup_db()
     console.print("[green]DB ready[/green] - schema at head")
+
+
+@playground.command()
+@click.option(
+    "--docker:components",
+    "docker_components",
+    default="containers,images,volumes",
+    help="comma list: containers,images,volumes",
+)
+@click.option("--docker:stopped-only", "docker_stopped_only", is_flag=True, help="only stopped botpen containers")
+@click.option("--db", "wipe_db", is_flag=True, help="also remove the DB (.db/messages.db + sidecars)")
+@click.option("--yes", is_flag=True, help="skip the confirmation prompt")
+def clean(docker_components: str, docker_stopped_only: bool, wipe_db: bool, yes: bool) -> None:
+    """Remove botpen containers / images / volumes / network + playground folders (and the DB with
+    --db). Host-side - it removes the Hub container itself, so it can't run inside it."""
+    # pyrefly: ignore [missing-import]
+
+    components = [c.strip() for c in docker_components.split(",") if c.strip()]
+    if not yes:
+        target = f"playground folders and docker components {components}"
+        if wipe_db:
+            target += " AND the database"
+        click.confirm(f"Remove {target}?", abort=True)
+    result = docker_service.teardown(components, docker_stopped_only)
+    if wipe_db:
+        db = Path(settings.DB_PATH)
+        for p in db.parent.glob(db.name + "*"):  # messages.db + journal sidecars
+            p.unlink(missing_ok=True)
+        result["db"] = str(settings.DB_PATH)
+    console.print(result)
 
 
 @playground.command()
