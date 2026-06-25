@@ -17,6 +17,7 @@ from rich.table import Table
 from ..stack_catalog import SCAFFOLD_STACK_CATALOG
 from .console import console
 from .scaffold import scaffold
+from ..core.db import setup_db
 
 # ---------------------------------------------------------------------------
 # Model choices - single source of truth; scaffold.py uses click.Choice inline
@@ -135,7 +136,7 @@ def _validate_and_group_stack(stack_items: list[str]) -> tuple[tuple[str, ...], 
     all_keys: dict[str, str] = {}  # key -> category
     for category, entries in SCAFFOLD_STACK_CATALOG.items():
         for entry in entries:
-            all_keys[entry["key"]] = category
+            all_keys[str(entry["key"])] = category
 
     for item in stack_items:
         cat = all_keys.get(item)
@@ -196,7 +197,6 @@ def playground() -> None:
 @playground.command()
 def setup() -> None:
     """Create the DB (host ./.db/messages.db) and apply migrations (alembic upgrade head). Idempotent."""
-    from ..core.db import setup_db
 
     setup_db()
     console.print("[green]DB ready[/green] - schema at head")
@@ -215,6 +215,10 @@ def start(num_agents: int, scaffold_config: str) -> None:
     """Provision N agents from a scaffold config, all with auto-start enabled."""
     if num_agents < 1:
         raise click.BadParameter("must be >= 1", param_hint="--num-agents")
+
+    # Ensure the DB + schema exist before provisioning (idempotent: alembic no-ops when at head).
+
+    setup_db()
 
     raw_configs = _parse_scaffold_config(scaffold_config)
     if not raw_configs:
@@ -243,7 +247,8 @@ def start(num_agents: int, scaffold_config: str) -> None:
 
     _print_plan(agent_specs, mapping_rule)
 
-    # Provision each agent
+    # Provision each agent. scaffold.callback is set by @click.command (Optional only in the type).
+    assert scaffold.callback is not None
     for i, model, stack_items, _ in agent_specs:
         languages, dbs, tools = _validate_and_group_stack(stack_items)
         console.rule(f"[bold blue]Provisioning agent {i}/{num_agents}[/bold blue]")
