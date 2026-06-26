@@ -15,7 +15,6 @@ from typing import Any
 
 from sqlmodel import select
 
-# pyrefly: ignore [missing-import]
 from config import settings
 
 from ...core.db import atomic, with_session
@@ -105,6 +104,5 @@ def set_status(
 @with_session
 def list_scaffolds(s) -> list[dict]:
     """All scaffolds, oldest first."""
-    # pyrefly: ignore [bad-argument-type]
     rows = s.exec(select(Scaffold).order_by(Scaffold.created_at)).all()
     return [_to_dict(sc) for sc in rows]

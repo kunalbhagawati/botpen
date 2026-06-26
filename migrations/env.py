@@ -17,7 +17,6 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-# pyrefly: ignore [missing-import]
 from config import settings  # noqa: E402
 from sqlmodel import SQLModel  # noqa: E402
 

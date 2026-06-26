@@ -1,0 +1,17 @@
+# Build-context guard for the agent image. The context is this playground dir (not the repo
+# root), and the Dockerfile copies only specific paths (.coordinate-src, entrypoint.sh, .claude).
+# These exclusions make the no-bias / no-secret guarantees explicit and robust against a future
+# stray file or a broad `COPY`.
+
+# No-bias: the repo's own agent-guidance files must never be baked into a playground image — a
+# CLAUDE.md / AGENTS.md anywhere in the context would auto-load and prime the agent.
+# See ARCHITECTURE.md § Design principle: no bias.
+CLAUDE.md
+AGENTS.md
+**/CLAUDE.md
+**/AGENTS.md
+
+# No-secret: the OAuth token reaches the container via compose env at runtime, never an image
+# layer. Keep .env* out of the image build context.
+.env
+.env.*

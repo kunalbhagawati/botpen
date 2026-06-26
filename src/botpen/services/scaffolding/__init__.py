@@ -1,8 +1,8 @@
-"""Scaffolding services: everything behind `manage.py scaffold`.
+"""Scaffolding services: everything behind `botpen scaffold`.
 
 Split by concern:
 - ``scaffold``  - the Scaffold provisioning record (mint identity/token, CRUD, link a session).
-- ``templates`` - render the playground skeleton (copier) into ``playgrounds/<slug>/`` (Phase 4).
-- ``docker``    - docker provisioning: volumes, build, run, attach, the ACL helper (Phase 5).
-- ``daemons``   - the in-container daemon set (relay / disk-monitor) wiring, run via `manage daemons` (Phase 5).
+- ``templates`` - render the playground skeleton (copier) into ``playgrounds/<slug>/``.
+- ``docker``    - host-side docker provisioning: shared volume, build, run, attach, teardown
+  (``/shared`` ops are delegated to the ``hub`` command).
 """

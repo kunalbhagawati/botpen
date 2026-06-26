@@ -12,7 +12,7 @@ import click
 from rich.table import Table
 
 from ..services import permissions as permissions_service
-from .render import console
+from .lib.render import console
 
 
 @click.group()
@@ -20,7 +20,7 @@ def permissions() -> None:
     """Shared-volume permission log (operator audit view)."""
 
 
-@click.command("list")
+@permissions.command("list")
 @click.option("--scaffold", "scaffold_id", default=None, help="filter to rows involving this scaffold")
 @click.option("--json", "as_json", is_flag=True, help="emit JSON instead of a table")
 def list_log(scaffold_id: str | None, as_json: bool) -> None:
@@ -45,6 +45,3 @@ def list_log(scaffold_id: str | None, as_json: bool) -> None:
             r["status"],
         )
     console.print(table)
-
-
-permissions.add_command(list_log)

@@ -17,7 +17,6 @@ from sqlalchemy import event, inspect
 from sqlmodel import Session as DBSession
 from sqlmodel import SQLModel, create_engine
 
-# pyrefly: ignore [missing-import]
 from config import settings
 
 _engine = create_engine(f"sqlite:///{settings.DB_PATH}")
@@ -119,10 +118,15 @@ def ensure_db() -> None:
         setup_db()
 
 
-def reset_db() -> None:
-    """Drop every table and re-apply migrations from scratch. DESTRUCTIVE."""
+def teardown_db() -> None:
+    """Drop every table and the Alembic version table, leaving an empty DB file. DESTRUCTIVE."""
     settings.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     SQLModel.metadata.drop_all(_engine)
     with _engine.begin() as conn:
         conn.exec_driver_sql("DROP TABLE IF EXISTS alembic_version")
+
+
+def reset_db() -> None:
+    """Drop every table and re-apply migrations from scratch. DESTRUCTIVE."""
+    teardown_db()
     setup_db()

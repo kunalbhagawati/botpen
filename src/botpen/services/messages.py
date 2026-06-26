@@ -106,11 +106,7 @@ def visible_to(message: dict, scaffold_id: str) -> bool:
 def read_since_last(s, scaffold_id: str) -> list[dict]:
     """Messages newer than this scaffold's own last message, addressed to it (broadcast or
     named recipient). If the scaffold has never written, returns the whole visible history."""
-    last = s.exec(
-        # pyrefly: ignore [missing-attribute]
-        select(Message.id).where(Message.scaffold_id == scaffold_id).order_by(Message.id.desc())
-    ).first()
-    # pyrefly: ignore [bad-argument-type]
+    last = s.exec(select(Message.id).where(Message.scaffold_id == scaffold_id).order_by(Message.id.desc())).first()
     stmt = select(Message).order_by(Message.id)
     if last is not None:
         stmt = stmt.where(Message.id > last)
@@ -122,7 +118,6 @@ def read_since_last(s, scaffold_id: str) -> list[dict]:
 def read_after(s, after_id: int, exclude_scaffold: str | None = None) -> list[dict]:
     """All messages with id > `after_id`, optionally excluding one scaffold's messages.
     Cursor-driven - for a monitor relaying everything new."""
-    # pyrefly: ignore [bad-argument-type, unsupported-operation]
     rows = s.exec(select(Message).where(Message.id > after_id).order_by(Message.id)).all()
     msgs = [_msg_to_dict(m) for m in rows]
     if exclude_scaffold is not None:
@@ -146,6 +141,5 @@ def read_thoughts(s, owner_session_id: str, caller_session_id: str) -> list[dict
         readers = owner_row.thoughts_readers or []
         if caller_session_id not in readers:
             return []
-    # pyrefly: ignore [bad-argument-type]
     rows = s.exec(select(Thought).where(Thought.session_id == owner_session_id).order_by(Thought.id)).all()
     return [_thought_to_dict(t) for t in rows]

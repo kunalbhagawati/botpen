@@ -1,9 +1,10 @@
-"""Console-script entry points for botpen.
+"""Console-script entry point for the host `botpen` command.
 
-Each entry point must inject the repo root onto sys.path before any
-root-level module (``config``) is imported. This mirrors the same trick
-manage.py uses so that ``from config import settings`` works when the
-command is invoked as an installed script (not via ./manage.py).
+It injects the repo root onto sys.path before any root-level module (``config``) is imported - the
+path has to be set first, the same trick the repo-root ``botpen`` shebang uses - so that
+``from config import settings`` works when invoked as the installed console script (not via
+``./botpen``). Imports below that bootstrap are intentionally not at the top of the file (ruff E402
+is ignored for this module in pyproject).
 """
 
 from __future__ import annotations
@@ -11,23 +12,16 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Repo root = two levels up from this file (src/botpen/_entrypoints.py)
+# Repo root = three levels up from this file (src/botpen/_entrypoints.py). Must be on sys.path
+# BEFORE the imports below, so `config` (a repo-root module, not part of the package) resolves.
 _ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from config import settings  # noqa: F401 - build the settings singleton up front
 
-def playground_main() -> None:
-    # Import deferred until after path injection above
-    from botpen.services.hub import exec_in_hub, running_in_hub  # noqa: PLC0415
+from botpen.cli import cli
 
-    argv = sys.argv[1:]
-    # `setup` (host-side DB file) and `clean` (removes the Hub container itself, so it can't run
-    # inside it) run here. Everything else (start) needs the docker socket, which lives in the Hub
-    # container, so it re-runs there via `docker exec`.
-    if running_in_hub() or (argv and argv[0] in ("setup", "clean")):
-        from botpen.commands.playground import playground  # noqa: PLC0415
 
-        playground()
-        return
-    exec_in_hub(["/app/.venv/bin/playground", *argv])
+def botpen_main() -> None:
+    cli()

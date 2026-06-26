@@ -1,8 +1,8 @@
 """Application configuration for botpen.
 
 A single pydantic-settings ``Settings`` object holds every app-level constant and env var.
-It lives at the repo root (Django-style); ``manage.py`` puts the repo root on ``sys.path`` so
-package code can ``from config import settings``.
+It lives at the repo root; the entry points (``botpen`` / ``hub``) put the repo root on ``sys.path``
+so package code can ``from config import settings``.
 
 SQLite is a local file with no built-in users or passwords - ``MESSAGES_USER`` / ``MESSAGES_APP``
 are informational tags, not credentials.
@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     SCAFFOLD_DEFAULT_MODEL: str  # default claude model alias for scaffolded agents (opus/sonnet/haiku/default)
     SCAFFOLD_UID_BASE: int
     SCAFFOLD_GID_BASE: int
+
+    # macOS terminal app that `scaffold` opens one window per bot in (Terminal / iTerm), via osascript.
+    BOTPEN_TERMINAL: str
 
     # Teardown monitor: minutes after an agent's container stops before the Hub reaps its
     # container / image / private volume / playground folder.

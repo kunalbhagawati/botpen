@@ -14,7 +14,6 @@ from typing import Any
 
 from sqlmodel import select
 
-# pyrefly: ignore [missing-import]
 from config import settings
 
 from ..core.db import atomic, with_session
@@ -78,6 +77,5 @@ def list_requests(s, scaffold_id: str | None = None, limit: int = 100) -> list[d
     stmt = select(RequestLog)
     if scaffold_id is not None:
         stmt = stmt.where(RequestLog.scaffold_id == scaffold_id)
-    # pyrefly: ignore [missing-attribute]
     rows = s.exec(stmt.order_by(RequestLog.id.desc()).limit(limit)).all()
     return [_to_dict(r) for r in rows]

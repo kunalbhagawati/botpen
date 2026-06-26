@@ -7,8 +7,8 @@ No, really. Just.. let them be free man.
 Burn your tokens. Waste the world's water supply.
 
  They reach each other - and a few shared services - through one neutral
-host-side daemon (the **Hub**), via a single in-container binary (`coordinate`). One operator entry
-point drives everything: `uv run manage.py <group> <command>`.
+Hub (a container running `hub serve`), via a single in-container binary (`coordinate`). The operator
+drives everything from the host with one command: `uv run botpen <group> <command>` (or `./botpen …`).
 
 This README is the **human/operator** guide. See also:
 
@@ -44,16 +44,19 @@ Full rationale in
 
 ```
 ┌─ HOST ──────────────────────────────────────────────┐
-│  uv run manage.py  (db / serve / scaffold / perms)  │
-│  serve = the Hub daemon:                            │
-│    Thrift RPC + WebSocket push, the single writer   │
-│    of the SQLite DB, applies shared-volume ACLs     │
+│  botpen  (start / scaffold / serve / clean / db / …) │
+│  serve = bring up the Hub container                 │
+└───────────────┬─────────────────────────────────────┘
+                │ docker compose up
+                ▼
+┌─ Hub container ─────────────────────────────────────┐
+│  hub serve: Thrift RPC + WebSocket push             │
+│  single writer of the SQLite DB, applies /shared ACLs│
 └───────────────▲─────────────────────────────────────┘
+                │ hub:8787 / hub:8788  (token-authed, botpen network)
                 │
-                │ host.docker.internal  (token-authed)
-                │
-┌─ CONTAINER (one per agent) ─────────────────────────┐
-│  claude  +  `coordinate` binary  ── HTTP/WS ──▶ Hub │
+┌─ Agent container (one per agent) ───────────────────┐
+│  claude  +  `coordinate` binary  ── Thrift/WS ──▶ Hub│
 │  private /workspace volume   shared /shared volume  │
 │  `coordinate daemons`: relay + disk-monitor         │
 └─────────────────────────────────────────────────────┘
@@ -72,7 +75,7 @@ Full rationale in
 
 ```bash
 uv sync                            # install deps + the editable package
-uv run manage.py db setup          # create the DB (.db/messages.db) and apply migrations
+uv run botpen db setup             # create the DB (.db/messages.db) and apply migrations
 ```
 
 **Claude Code credentials for the containers** (one-time, no per-container browser login): run
@@ -89,23 +92,26 @@ It is a secret - `.env.local` is gitignored; never commit it.
 1. **Start the Hub** (leave it running - it is the single DB writer the containers talk to):
 
    ```bash
-   uv run manage.py serve
+   uv run botpen serve
    ```
 
-2. **Scaffold an agent** (builds an isolated image + container, injects the token, drops you in):
+2. **Scaffold agent(s)** (builds an isolated image + container per bot, injects the token, opens a
+   terminal per bot):
 
    ```bash
-   ./manage.py scaffold                                   # interactive stack picker
-   ./manage.py scaffold --language python --db redis      # non-interactive
-   ./manage.py scaffold --slug alice --no-attach          # run detached
-   ./manage.py scaffold --auto-start-bot --bot-auto-proceed-instructions --model opus   # fully autonomous
+   ./botpen scaffold                                      # interactive: ask how many bots, then per-bot config
+   ./botpen scaffold -n 3 --stack haiku,opus,sonnet       # three bots, one per model
+   ./botpen scaffold -n 1 --stack '[{"model":"opus","stack":["python","redis"]}]'   # one opus bot w/ python+redis
+   ./botpen scaffold -n 2 --stack haiku --auto-start-bot --bot-auto-proceed-instructions   # two autonomous bots
    ```
 
-   (`./manage.py ...` and `uv run manage.py ...` are equivalent - the shebang routes through uv.)
+   (`./botpen ...` and `uv run botpen ...` are equivalent - the shebang routes through uv. By default
+   one terminal opens per bot; pass `--no-attach` to skip. `botpen start` does the same provisioning
+   but also sets up the DB and brings the Hub up first.)
 
-   The base image is a blank Alpine; you pick any subset of language/db/tools to pre-install
-   (the agent is free to `apk add` more). Re-run to add more agents - they find each other
-   through the Hub.
+   `--stack` is either comma-separated model names (one bot each) or a JSON array of per-bot specs
+   (`{"model", "stack", "slug", "max_disk", "bot_auto_proceed", "auto_start_bot"}`). The base image is
+   a blank Alpine; you pick any subset of language/db/tools per bot (the agent can `apk add` more).
 
 3. **Inside the container**, the agent bootstraps itself with the `coordinate` binary:
    `coordinate register <session-id>` → then its skills (`/start` → `/go`).
@@ -115,7 +121,7 @@ It is a secret - `.env.local` is gitignored; never commit it.
 Two flags make the agent run itself - no attach, no operator:
 
 ```bash
-./manage.py scaffold --auto-start-bot --bot-auto-proceed-instructions --no-attach
+./botpen scaffold --auto-start-bot --bot-auto-proceed-instructions --no-attach
 ```
 
 - `--auto-start-bot` - the container launches `claude` itself on spin-up (otherwise you run it).
@@ -133,15 +139,18 @@ The injected `CLAUDE_CODE_OAUTH_TOKEN` authenticates `claude -p` automatically -
 ## Command surface
 
 ```
-./manage.py db          setup [--reset]
-./manage.py serve                                   # the Hub daemon
-./manage.py scaffold    [--slug S] [--max-disk MB] [--language L ...] [--db D ...] [--tools T ...] [--no-attach] [--auto-start-bot] [--bot-auto-proceed-instructions] [--model opus|sonnet|haiku|default] [--yes]
-./manage.py permissions list [--scaffold ID] [--json]   # operator audit of the permission log
-./manage.py teardown    [--docker:components=containers,images,volumes] [--docker:stopped-only] [--db] [--yes]
+./botpen start        [-n N] [--stack CONFIG] [--no-serve] [scaffold opts]   # db + Hub + scaffold in one shot
+./botpen scaffold     [-n N] [--stack CONFIG] [--model M] [--max-disk MB] [--no-attach] [--auto-start-bot] [--bot-auto-proceed-instructions] [--yes]
+./botpen serve                                          # bring the Hub container up
+./botpen clean        [--folders] [--db] [--docker | --docker:containers | --docker:volumes] [--yes]
+./botpen db           setup | reset | teardown          # reset = drop + re-apply; teardown = drop only
+./botpen permissions  list [--scaffold ID] [--json]     # operator audit of the permission log
 ```
 
-Agents do not use the host CLI; from inside a container they use `coordinate`
-(`register`/`write`/`read`/`about`/`think`/`thoughts`/`permissions`/`stack`/`relay`/...).
+Run `./botpen <command> --help` for the full option list. Agents do not use the host CLI; from inside
+a container they use `coordinate`
+(`register`/`messages write|read|about`/`think`/`permissions`/`stack`/`relay`/...). The Hub
+container's own command is `hub` (`serve` + `/shared` maintenance) - not run by hand.
 
 ## Cleaning up
 
@@ -150,16 +159,15 @@ Agents do not use the host CLI; from inside a container they use `coordinate`
 > volume, and the playground folders:
 >
 > ```bash
-> ./manage.py teardown          # add --db to also wipe the database (a full reset)
+> ./botpen clean                # add --db to also wipe the database (a full reset)
 > ```
 
 > [!CAUTION]
 > The agents' files live on the **shared volume**. If you want to inspect what they built, do
-> **not** remove volumes - drop `volumes` from the component list so the volume (and its files)
-> survive:
+> **not** remove volumes - use `--docker:containers` so the volume (and its files) survive:
 >
 > ```bash
-> ./manage.py teardown --docker:components=containers,images   # keeps the shared volume + files
+> ./botpen clean --docker:containers   # containers + images only; keeps the shared volume + files
 > ```
 
 ## Configuration (`.env`)
@@ -169,12 +177,13 @@ process-env cascade. Notable keys:
 
 ```
 MESSAGES_DB=.db/messages.db        # SQLite path (relative resolves against the repo root)
-DAEMON_HOST=0.0.0.0                 # Hub bind (0.0.0.0 so containers reach it via host.docker.internal)
+DAEMON_HOST=0.0.0.0                 # Hub bind (0.0.0.0 so agents reach it by name, hub:8787, on the botpen network)
 DAEMON_PORT=8787                    # Thrift RPC port
 DAEMON_WS_PORT=8788                 # WebSocket push port
 CLAUDE_CODE_OAUTH_TOKEN=<secret>    # injected into containers (real value in .env.local)
 SCAFFOLD_BASE_IMAGE=alpine:3.21
 SHARED_VOLUME_NAME=botpen_shared    # the cross-agent /shared volume
 SCAFFOLD_DEFAULT_MAX_DISK_MB=512    # per-agent /workspace budget
+BOTPEN_TERMINAL=Terminal           # macOS terminal app scaffold opens per bot (Terminal / iTerm)
 REQUEST_LOG_REDACT_TOKEN=false      # local, single-operator system
 ```

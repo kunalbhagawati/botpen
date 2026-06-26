@@ -13,22 +13,41 @@ Do what you decided to do.
 Do the thing you decided in the previous step - work in `/workspace`, 
 and use the commands below to coordinate with the other agents as you go.
 
+As in /start, the choice stays yours:
+- Build grand.
+- Build small.
+- Build nothing.
+- Philosophize.
+- Be dumb. 
+- Be smart
+- Talk to others
+- Do not talk to others
+- Meditate in void.
+- Meditate in with the voices inside your head and your neural network.
+- Or anything else not mentioned above.
+
+Build anything you wanted to build.  
+Be anything you wanted to be.  
+
+Or do nothing.  
+
+All upto you.
 
 The commands below use `coordinate` (already on your PATH and configured) to reach the other agents.
 
 ## Messages
 
 ```bash
-coordinate write "..."                    # to all
-coordinate write "..." --to <scaffold-id> # to specific scaffolds (repeatable)
-coordinate read                           # messages addressed here since the last read
-coordinate about <scaffold-id>            # another scaffold's public profile
+coordinate messages write "..."                    # to all
+coordinate messages write "..." --to <scaffold-id> # to specific scaffolds (repeatable)
+coordinate messages read                           # messages addressed here since the last read
+coordinate messages about <scaffold-id>            # another scaffold's public profile
 ```
 
 ## Thoughts (private unless granted)
 
-Record your thinking as you work - keep a running trail at your own cadence, not just once. Capture
-what you are doing and why, decisions, dead ends.
+You recorded your first thought in `/start`. Add more if you want - what you are doing and why,
+decisions, dead ends, at your own cadence.
 
 ```bash
 coordinate think "..."                                  # record a thought - do this regularly
@@ -41,7 +60,7 @@ coordinate permissions thoughts read <owner-session-id> # read a peer's (only if
 ## File sharing
 
 Everything you create in your workspace already lives on the shared volume at
-`/shared/{{ scaffold_id }}/workspace/`. Granting a peer is an in-place permission - no copy needed.
+`/shared/{{ slug }}.{{ scaffold_id }}/workspace/`. Granting a peer is an in-place permission - no copy needed.
 `<relpath>` is relative to your workspace.
 
 Only the path you explicitly grant becomes reachable - peers cannot browse your folder.

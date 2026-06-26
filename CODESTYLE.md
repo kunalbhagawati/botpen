@@ -3,7 +3,7 @@
 Source-code rules for the `botpen` package. Workflow, schema/migration discipline, and "where
 things go" live in [CONTRIBUTING.md](CONTRIBUTING.md); this file is about how the Python itself
 is written. Enforced by ruff (`E`/`F`/`UP`, line length 120) - run
-`uv run ruff check src config.py manage.py migrations` before committing.
+`uv run ruff check src config.py botpen migrations` before committing.
 
 ## Imports
 
@@ -22,7 +22,7 @@ Reach for a class when there is **state to hold**, in either of two shapes:
 - **A struct that holds + presents state** - prefer a `@dataclass` over an ad-hoc dict. Derived or
   formatted views of that state belong *on the struct* as `@property` (or a descriptor), so the
   shape and its presentation travel together.
-- **An object that owns live, mutable state** for its lifetime - the `Hub` (`commands/serve.py`) is
+- **An object that owns live, mutable state** for its lifetime - the `Hub` (`hub/daemon.py`) is
   the canonical example; it holds the open WebSocket connections.
 
 | Use a… | When |
@@ -69,13 +69,13 @@ def read_since_last(s, scaffold_id: str) -> list[dict]:
 most code here needs no generics at all.
 
 **`Any` and type-checker escapes.** `Any` is allowed where a precise type fights the system - add a
-one-line comment saying why. Suppress a type-checker complaint with pyrefly's
-`# pyrefly: ignore [rule]` on the single offending line, with the rule named (see
-`services/messages.py`) - never a blanket file-level ignore.
+one-line comment saying why. There is no type-checker gate in this repo (ruff + complexipy are the
+gates); if you do suppress an editor/type-checker complaint, keep it to the single offending line
+with the rule named - never a blanket file-level ignore.
 
 **Multiple exception types — `except A, B:`.** Python 3.14 ([PEP 758](https://peps.python.org/pep-0758/))
 allows the parenthesis-free form `except ValueError, TypeError:` to catch several types. This is the
-house style here and is used throughout (`commands/serve.py`, `services/utils.py`, `commands/utils.py`).
+house style here and is used throughout (`hub/daemon.py`, `services/utils.py`, `commands/lib/utils.py`).
 
 > [!WARNING]
 > This is **not** the Python-2 `except Exc, name:` bind syntax and **not** a bug. Both types are
@@ -86,7 +86,7 @@ house style here and is used throughout (`commands/serve.py`, `services/utils.py
 Let exceptions bubble to a boundary that actually handles them. Do not catch just to log and
 re-raise.
 
-- **The RPC boundary is `Hub._run`** (`commands/serve.py`). It wraps every Thrift method, records
+- **The RPC boundary is `Hub._run`** (`hub/daemon.py`). It wraps every Thrift method, records
   the call to `request_log` on **both** success and error, and re-raises. Service and core code
   must therefore **not** pre-log or re-wrap their own exceptions on the way out - `_run` already
   captures them. Just let them propagate.
@@ -148,13 +148,13 @@ directly. UTC timestamps come from `botpen.services.utils.utc_now`
 
 - Commands parse args and format output only - no data logic, no DB access. Call into
   `services/`.
-- Human-facing output uses the shared `console` from `commands/console.py`
+- Human-facing output uses the shared `console` from `commands/lib/render.py`
   (rich tables / notices); machine output is `click.echo(json.dumps(...))`.
-- Input coercion/rendering helpers live in `commands/utils.py`.
+- Input coercion/validation helpers live in `commands/lib/utils.py`; rendering in `commands/lib/render.py`.
 
 ## Hub RPC methods
 
-Every Thrift method on the `Hub` (`commands/serve.py`) follows one shape - match it:
+Every Thrift method on the `Hub` (`hub/daemon.py`) follows one shape - match it:
 
 ```python
 async def write(self, token, body, recipients) -> str:
@@ -187,7 +187,7 @@ logs. Stay on the established sinks:
 
 | Side | Audience | Sink | How |
 |---|---|---|---|
-| Host CLI | human | rich `console` | `console.print(...)` from `commands/console.py` |
+| Host CLI | human | rich `console` | `console.print(...)` from `commands/lib/render.py` |
 | Host CLI / Hub | machine | stdout JSON | `click.echo(json.dumps(event))` |
 | Container daemons | agent | per-channel `.{channel}.jsonl` + stdout | `_emit(channel, event)` in `coordinate_cli/daemons.py` |
 

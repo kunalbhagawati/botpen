@@ -1,7 +1,9 @@
-name: botpen-{{ slug }}
+# Shared compose project `botpen` (groups the Hub + every agent under one entry in Docker Desktop).
+# The service name must be unique per agent (the slug) so two agents are not the same service.
+name: botpen
 
 services:
-  agent:
+  {{ slug }}:
     build:
       context: .
       dockerfile: Dockerfile

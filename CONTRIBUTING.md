@@ -18,11 +18,13 @@ each container by the copier template) or for operators (see [`README.md`](READM
 
 ```bash
 uv sync                       # install deps + the editable package
-uv run manage.py db setup     # create .db/messages.db and apply migrations
+uv run botpen db setup        # create .db/messages.db and apply migrations
 ```
 
-Everything runs through `uv run manage.py <group> <command>` (`db` / `serve` / `scaffold` /
-`permissions`).
+The host operator CLI is `uv run botpen <group> <command>` (`start` / `scaffold` / `serve` / `clean`
+/ `db` / `permissions`); `./botpen …` is equivalent. Two other commands exist for other environments
+and are not run on the host: `hub` (inside the Hub container) and `coordinate` (inside an agent
+container). See [ARCHITECTURE.md § Three commands](ARCHITECTURE.md#three-commands-three-contexts).
 
 ## Where things go
 
@@ -33,13 +35,14 @@ Everything runs through `uv run manage.py <group> <command>` (`db` / `serve` / `
 | DB engine / session / pragmas | `src/botpen/core/db.py` (only services open sessions, via the decorators) |
 | A data operation (host side) | `src/botpen/services/<concern>.py` (wrap reads with `@with_session`, writes with `@atomic`) |
 | Scaffold provisioning / rendering | `src/botpen/services/scaffolding/{scaffold,templates,docker}.py` |
-| A host CLI command | `src/botpen/commands/<group>.py`, registered on its group in `cli.py` |
+| A host CLI command | `src/botpen/commands/<group>.py`, mounted on the root group in `cli.py` |
+| An in-Hub-container op (daemon / `/shared` / ACL) | `src/botpen/hub/` (`daemon.py` for the Hub daemon, `shared.py` for `/shared` ops, wired in `hub/cli.py`) |
 | Agent-facing RPC / command | `src/coordinate_cli/cli.py` + `src/resources/hub.thrift` (add to the IDL first) |
 | In-container background daemons | `src/coordinate_cli/daemons.py` |
 | Playground template files | `src/resources/skeleton/` (Jinja + copier.yml) |
 | Agent runtime skills (live in container) | `src/resources/skeleton/.claude/skills/<skill>/SKILL.md` |
 | Data-domain helpers (timestamps, id normalization) | `src/botpen/services/utils.py` |
-| CLI parse/render helpers | `src/botpen/commands/utils.py` |
+| CLI parse/render helpers | `src/botpen/commands/lib/` (`utils.py` parse/validate/BotSpec, `render.py` console/box) |
 
 ## Coding conventions
 
@@ -68,6 +71,12 @@ The schema is **Alembic-managed**. `core/models.py` is the model source; the mig
 `migrations/versions/` are the schema artifact that actually runs.
 
 > [!IMPORTANT]
+> **Alembic is kept deliberately - do not replace it with ad-hoc SQL.** It gives idempotent,
+> state-matched migrations (`db setup` diffs the live DB against `head` and runs only what is
+> missing) and fits the SQLModel + Python stack with no new tooling. `db setup` is the only entry
+> operators see.
+
+> [!IMPORTANT]
 > **An AI agent MUST NOT create, edit, or delete a migration without explicit human approval.**
 > Surface the need - what changed in `core/models.py`, the migration you would generate - and
 > **stop**. Never write or apply a migration silently. The schema is the one place where a wrong
@@ -81,8 +90,8 @@ The schema is **Alembic-managed**. `core/models.py` is the model source; the mig
   ```bash
   uv run alembic revision --autogenerate -m "<what changed>"
   ```
-  Review and apply with `uv run manage.py db setup`. (`db setup --reset` drops everything and
-  re-applies from scratch - dev only, it wipes data.)
+  Review and apply with `uv run botpen db setup`. (`db reset` drops everything and re-applies from
+  scratch - dev only, it wipes data; `db teardown` drops tables without re-applying.)
 - **Prefer raw SQL when autogenerate churns.** SQLModel's SQLite reflection reads every column
   back as `TEXT`/`AutoString` and rewrites unrelated tables or renames indexes. When that
   happens, hand-write the migration body as raw SQL in `op.execute("...")` so it contains
@@ -114,9 +123,9 @@ The schema is **Alembic-managed**. `core/models.py` is the model source; the mig
 The IDL is the contract; both sides compile from it, and the method name is the join key.
 
 1. Add the method signature to `src/resources/hub.thrift` - **edit the IDL first**.
-2. Implement it as an `async def` on the `Hub` class in `src/botpen/commands/serve.py`, following
-   the handler contract every method uses - an inner `work(sc)` closure handed to `self._run`, with
-   all blocking calls via `asyncio.to_thread`. The code-level contract is spelled out in
+2. Implement it as an `async def` on the `Hub` class in `src/botpen/hub/daemon.py`, following the
+   handler contract every method uses - an inner `work(sc)` closure handed to `self._run`, with all
+   blocking calls via `asyncio.to_thread`. The code-level contract is spelled out in
    [CODESTYLE.md § Hub RPC methods](CODESTYLE.md#hub-rpc-methods).
 3. Add the matching client command to `src/coordinate_cli/cli.py` (the agent-facing binary). It
    calls the Hub via the Thrift client (`client.call`) - never the repo or DB.
@@ -155,7 +164,7 @@ committed `.env` (and optional `.env.local` overrides); do **not** also hard-cod
 ## Before committing
 
 ```bash
-uv run ruff check src config.py manage.py migrations
+uv run ruff check src config.py botpen migrations
 ```
 
 ruff config is in `pyproject.toml` (line length 120, `E`/`F`/`UP` selected). Generated

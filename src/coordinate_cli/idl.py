@@ -16,7 +16,7 @@ _module = None
 
 def _idl_path() -> str:
     if getattr(sys, "frozen", False):  # PyInstaller bundle
-        return os.path.join(sys._MEIPASS, "hub.thrift")  # pyrefly: ignore [missing-attribute]
+        return os.path.join(sys._MEIPASS, "hub.thrift")
     here = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(here, os.pardir, "resources", "hub.thrift")
 

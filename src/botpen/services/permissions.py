@@ -138,6 +138,5 @@ def list_log(s, scaffold_id: str | None = None) -> list[dict]:
         stmt = stmt.where(
             (PermissionLog.owner_scaffold_id == scaffold_id) | (PermissionLog.peer_scaffold_id == scaffold_id)
         )
-    # pyrefly: ignore [bad-argument-type]
     rows = s.exec(stmt.order_by(PermissionLog.id)).all()
     return [_to_dict(p) for p in rows]

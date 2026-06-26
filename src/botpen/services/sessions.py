@@ -22,8 +22,7 @@ def _active(s, scaffold_id: str) -> Session | None:
     """The latest registered, not-yet-stopped incarnation for a scaffold (uses the caller's `s`)."""
     return s.exec(
         select(Session)
-        .where(Session.scaffold_id == scaffold_id, Session.stopped_at.is_(None))  # pyrefly: ignore [missing-attribute]
-        # pyrefly: ignore [missing-attribute]
+        .where(Session.scaffold_id == scaffold_id, Session.stopped_at.is_(None))
         .order_by(Session.registered_at.desc())
     ).first()
 

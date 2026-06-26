@@ -13,7 +13,6 @@ from typing import Any
 
 from copier import run_copy
 
-# pyrefly: ignore [missing-import]
 from config import settings
 
 from ...stack_catalog import SCAFFOLD_STACK_CATALOG

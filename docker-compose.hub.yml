@@ -1,7 +1,9 @@
-# botpen Hub - the control-plane service. Brought up by `manage.py serve` (via ensure_hub).
+# botpen Hub - the control-plane service. Brought up by `botpen serve` (via ensure_hub); the
+# container's main process is `hub serve`.
 # Mirrors the signal-builder pattern: a shared external `botpen` bridge network that the Hub and
 # every agent container join, so they resolve each other by name (agents reach the Hub at hub:8787).
-name: botpen-hub
+# Compose project `botpen` (shared with the agents) so Docker Desktop groups them under one entry.
+name: botpen
 
 # Same env cascade as the host CLI (.env -> .env.local). The Hub reads the same config the operator
 # does, with a couple of in-container overrides below.
