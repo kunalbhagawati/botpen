@@ -34,7 +34,6 @@ class Scaffold(SQLModel, table=True):
     identity used everywhere. Created at `scaffold new` time, before any claude session exists;
     `secret_key` is the per-agent token the daemon authenticates."""
 
-    # pyrefly: ignore [bad-override]
     __tablename__ = "scaffolds"
 
     scaffold_id: str = Field(primary_key=True)  # uuid hex, host-minted - the canonical agent id
@@ -54,7 +53,6 @@ class Session(SQLModel, table=True):
     """One incarnation (a claude transcript) running inside a scaffold. Carries the personality
     and lifecycle of that run; multiple sessions can share a scaffold over time (lineage)."""
 
-    # pyrefly: ignore [bad-override]
     __tablename__ = "sessions"
 
     session_id: str = Field(primary_key=True)  # claude transcript uuid (lineage metadata)
@@ -74,7 +72,6 @@ class Session(SQLModel, table=True):
 
 
 class Message(SQLModel, table=True):
-    # pyrefly: ignore [bad-override]
     __tablename__ = "messages"
 
     id: int | None = Field(default=None, primary_key=True)
@@ -87,7 +84,6 @@ class Message(SQLModel, table=True):
 
 
 class Thought(SQLModel, table=True):
-    # pyrefly: ignore [bad-override]
     __tablename__ = "thoughts"
 
     id: int | None = Field(default=None, primary_key=True)
@@ -105,7 +101,6 @@ class PermissionLog(SQLModel, table=True):
     `{"path": str, "is_recursive": bool, "permissions": str, "children": [...]}`.
     """
 
-    # pyrefly: ignore [bad-override]
     __tablename__ = "permission_log"
 
     id: int | None = Field(default=None, primary_key=True)
@@ -128,7 +123,6 @@ class RequestLog(SQLModel, table=True):
     """Every request the daemon serves, for debugging/audit (Thrift's binary RPC is not
     curl-debuggable). The token is stored only if REQUEST_LOG_REDACT_TOKEN is off (default)."""
 
-    # pyrefly: ignore [bad-override]
     __tablename__ = "request_log"
 
     id: int | None = Field(default=None, primary_key=True)

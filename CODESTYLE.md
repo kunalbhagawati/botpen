@@ -3,7 +3,7 @@
 Source-code rules for the `botpen` package. Workflow, schema/migration discipline, and "where
 things go" live in [CONTRIBUTING.md](CONTRIBUTING.md); this file is about how the Python itself
 is written. Enforced by ruff (`E`/`F`/`UP`, line length 120) - run
-`uv run ruff check src config.py manage.py migrations` before committing.
+`uv run ruff check src config.py botpen migrations` before committing.
 
 ## Imports
 
@@ -69,9 +69,9 @@ def read_since_last(s, scaffold_id: str) -> list[dict]:
 most code here needs no generics at all.
 
 **`Any` and type-checker escapes.** `Any` is allowed where a precise type fights the system - add a
-one-line comment saying why. Suppress a type-checker complaint with pyrefly's
-`# pyrefly: ignore [rule]` on the single offending line, with the rule named (see
-`services/messages.py`) - never a blanket file-level ignore.
+one-line comment saying why. There is no type-checker gate in this repo (ruff + complexipy are the
+gates); if you do suppress an editor/type-checker complaint, keep it to the single offending line
+with the rule named - never a blanket file-level ignore.
 
 **Multiple exception types — `except A, B:`.** Python 3.14 ([PEP 758](https://peps.python.org/pep-0758/))
 allows the parenthesis-free form `except ValueError, TypeError:` to catch several types. This is the

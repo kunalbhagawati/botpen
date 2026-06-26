@@ -1,0 +1,25 @@
+#!/usr/bin/env -S uv run --quiet python
+"""Repo-root entry point for the host `botpen` command.
+
+The shebang runs the file through uv, so `./botpen ...` uses the project venv. Running a script by
+path also puts the repo root on sys.path so the root-level `config` module is importable.
+
+    ./botpen serve                         # bring the Hub container up
+    ./botpen scaffold                      # provision agent(s)
+    ./botpen db setup                      # create .db/messages.db + apply migrations
+    ./botpen start -n 3 -c haiku,opus      # provision N agents in one shot
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from botpen._entrypoints import botpen_main  # noqa: E402 - repo root must be on sys.path first
+
+if __name__ == "__main__":
+    botpen_main()

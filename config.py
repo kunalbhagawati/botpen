@@ -1,8 +1,8 @@
 """Application configuration for botpen.
 
 A single pydantic-settings ``Settings`` object holds every app-level constant and env var.
-It lives at the repo root (Django-style); ``manage.py`` puts the repo root on ``sys.path`` so
-package code can ``from config import settings``.
+It lives at the repo root; the entry points (``botpen`` / ``hub``) put the repo root on ``sys.path``
+so package code can ``from config import settings``.
 
 SQLite is a local file with no built-in users or passwords - ``MESSAGES_USER`` / ``MESSAGES_APP``
 are informational tags, not credentials.

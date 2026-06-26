@@ -22,12 +22,12 @@ dependencies = [
 [dependency-groups]
 dev = [
     "complexipy>=5.5.0",
-    "pyrefly>=1.0.0",
     "ruff>=0.15.17",
 ]
 
 [project.scripts]
-playground = "botpen._entrypoints:playground_main"
+botpen = "botpen._entrypoints:botpen_main"   # host operator CLI
+hub = "botpen.hub:hub_main"                  # runs INSIDE the Hub container only
 
 [build-system]
 requires = ["uv_build>=0.11.15,<0.12.0"]
@@ -54,7 +54,15 @@ ignore = [
   "E501",
 ] # ruff format handles line length for code; SQL query strings are inherently long
 
+[tool.ruff.lint.per-file-ignores]
+# Entry-point / CLI files must put the repo root on sys.path FIRST (the path has to be set before
+# `config` or any package module is importable), so their module-level imports legitimately sit
+# below that bootstrap code - E402 (module-level import not at top) does not apply here.
+"src/botpen/_entrypoints.py" = ["E402"]
+"src/botpen/hub/cli.py" = ["E402"]
+"botpen" = ["E402"]
+
 [tool.complexipy]
 # Cognitive-complexity gate. Snapshot baseline (complexipy-snapshot.json) is committed;
 # the pre-push hook fails on functions not in it. Regenerate with `uv run complexipy --snapshot-create`.
-paths = ["src", "config.py", "manage.py"]
+paths = ["src", "config.py", "botpen"]

@@ -13,7 +13,6 @@ import time
 
 import click
 
-# pyrefly: ignore [missing-import]
 from config import settings
 
 from ..core.db import ensure_db

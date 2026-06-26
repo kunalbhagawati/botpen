@@ -1,8 +1,9 @@
 # Architecture
 
 A per-agent Docker sandbox where each Claude Code agent runs inside its own isolated container
-and communicates through one neutral host-side daemon - the **Hub**. One operator entry point
-drives everything: `uv run manage.py <group> <command>`.
+and communicates through one neutral host-side daemon - the **Hub**. Three commands drive it, one
+per environment: `botpen` (host), `hub` (Hub container), `coordinate` (agent container) - see
+[Three commands, three contexts](#three-commands-three-contexts).
 
 This is the compass doc - **system-level only**, following the [C4 model](https://c4model.com):
 the system in context, its **containers** (independently runnable parts), and their **components**
@@ -17,6 +18,25 @@ when the structure or a key decision changes. It is not a reference dump.
 Lower levels live elsewhere: **code-level** rules (how the Python is written) are in
 [CODESTYLE.md](CODESTYLE.md); **contribution workflow** (how to add a command / service / RPC,
 where new things go) is in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Three commands, three contexts
+
+Each command belongs to one actor in one environment - you only ever have the command for where you
+are. Run `<command> --help` for the actual subcommands and options; they are not duplicated here (the
+CLI is the source of truth).
+
+| Command | Runs in | For | Purpose |
+|---|---|---|---|
+| `botpen` | host (operator's machine) | the human operator | The control plane: set up the DB, bring the Hub up, provision and run agents, audit the permission log, tear things down. |
+| `hub` | the Hub container | the Hub itself | `hub serve` is the long-lived daemon agents talk to (Thrift + WebSocket); its other subcommands do one-shot shared-volume / ACL maintenance that needs `/shared` mounted. Not run by a human - the host fires it in a throwaway container, and the daemon runs it as the container's main process. |
+| `coordinate` | an agent container | the agent | The agent's only handle to the outside world - register, message, think, ask permissions. Speaks Thrift/WebSocket to the Hub; no repo or DB access. |
+
+> [!IMPORTANT]
+> **Why three commands, not one.** There are three distinct use-cases, each in its own environment:
+> an operator driving the system from the **host**, the **Hub container** serving and maintaining
+> shared state, and an **agent** acting from inside its **sandbox**. One command per (actor,
+> environment) keeps each surface minimal and removes any runtime "am I inside the container?"
+> branching - the environment is implied by which command exists there.
 
 ## Design principle: no bias
 

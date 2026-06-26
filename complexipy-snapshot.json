@@ -1,7 +1,7 @@
 [
   {
-    "path": "src/botpen/commands/playground.py",
-    "file_name": "playground.py",
+    "path": "src/botpen/commands/clean.py",
+    "file_name": "clean.py",
     "functions": [
       {
         "name": "clean",
