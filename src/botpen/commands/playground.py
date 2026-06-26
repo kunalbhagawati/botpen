@@ -16,9 +16,9 @@ from ..core.db import setup_db
 from config import settings
 
 from ..services.scaffolding import docker as docker_service
-from .render import box, console, print_plan
+from .lib.render import box, console, print_plan
 from .scaffold import scaffold
-from .utils import parse_scaffold_config, validate_and_group_stack, validate_model
+from .lib.utils import parse_scaffold_config, validate_and_group_stack, validate_model
 
 
 # ---------------------------------------------------------------------------

@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import click
 import questionary
 
-from ..stack_catalog import SCAFFOLD_STACK_CATALOG
+from ...stack_catalog import SCAFFOLD_STACK_CATALOG
 
 # ---------------------------------------------------------------------------
 # Model choices - single source of truth
@@ -199,3 +200,20 @@ def resolve_stack(flags: dict[str, tuple[str, ...]], interactive: bool) -> dict[
                 raise click.BadParameter(f"{category}: '{k}' not in {keys}")
         stack[category] = chosen
     return stack
+
+
+def _decode(value: str) -> Any:
+    """Decode a JSON-string arg; empty -> None. (Wire fields are strings.)"""
+    return json.loads(value) if value else None
+
+
+def thrift_grant_to_dict(node: Any) -> dict | None:
+    """Convert a Thrift `GrantNode` (recursive) into the plain JSON tree the service stores."""
+    if node is None:
+        return None
+    return {
+        "path": node.path,
+        "is_recursive": bool(node.is_recursive),
+        "permissions": node.permissions,
+        "children": [thrift_grant_to_dict(c) for c in (node.children or [])],
+    }

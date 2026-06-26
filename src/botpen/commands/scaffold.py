@@ -21,8 +21,8 @@ from ..services import hub as hub_service
 from ..services.scaffolding import docker as docker_service
 from ..services.scaffolding import scaffold as scaffold_service
 from ..services.scaffolding import templates as templates_service
-from .render import box, console
-from .utils import resolve_stack
+from .lib.render import box, console
+from .lib.utils import resolve_stack
 
 
 @click.command()

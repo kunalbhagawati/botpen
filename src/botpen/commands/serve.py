@@ -23,6 +23,8 @@ import websockets
 from thriftpy2.rpc import make_aio_server
 
 # pyrefly: ignore [missing-import]
+from botpen.commands.lib.utils import _decode
+from botpen.commands.lib.utils import thrift_grant_to_dict
 from config import settings
 
 from ..core.db import ensure_db
@@ -37,23 +39,6 @@ from ..services.scaffolding import scaffold as scaffold_service
 from ..services.utils import normalize_session
 
 _IDL_PATH = settings.WORKING_DIR / "src" / "resources" / "hub.thrift"
-
-
-def _grant_to_dict(node: Any) -> dict | None:
-    """Convert a Thrift `GrantNode` (recursive) into the plain JSON tree the service stores."""
-    if node is None:
-        return None
-    return {
-        "path": node.path,
-        "is_recursive": bool(node.is_recursive),
-        "permissions": node.permissions,
-        "children": [_grant_to_dict(c) for c in (node.children or [])],
-    }
-
-
-def _decode(value: str) -> Any:
-    """Decode a JSON-string arg; empty -> None. (Wire fields are strings.)"""
-    return json.loads(value) if value else None
 
 
 class Hub:
@@ -245,23 +230,27 @@ class Hub:
 
     async def perm_grant(self, token, peer_scaffold_id, grant, reason) -> str:
         async def work(sc):
-            tree = _grant_to_dict(grant)
+            tree = thrift_grant_to_dict(grant)
             row = await asyncio.to_thread(
                 permissions_service.log_grant, sc["scaffold_id"], peer_scaffold_id, tree, reason or None
             )
             return await self._apply_or_fail(row, sc["scaffold_id"], peer_scaffold_id, tree, docker_service.apply_acl)
 
-        return await self._run("perm_grant", token, {"peer": peer_scaffold_id, "grant": _grant_to_dict(grant)}, work)
+        return await self._run(
+            "perm_grant", token, {"peer": peer_scaffold_id, "grant": thrift_grant_to_dict(grant)}, work
+        )
 
     async def perm_revoke(self, token, peer_scaffold_id, grant, reason) -> str:
         async def work(sc):
-            tree = _grant_to_dict(grant)
+            tree = thrift_grant_to_dict(grant)
             row = await asyncio.to_thread(
                 permissions_service.log_revoke, sc["scaffold_id"], peer_scaffold_id, tree, reason or None
             )
             return await self._apply_or_fail(row, sc["scaffold_id"], peer_scaffold_id, tree, docker_service.revoke_acl)
 
-        return await self._run("perm_revoke", token, {"peer": peer_scaffold_id, "grant": _grant_to_dict(grant)}, work)
+        return await self._run(
+            "perm_revoke", token, {"peer": peer_scaffold_id, "grant": thrift_grant_to_dict(grant)}, work
+        )
 
     async def perm_list(self, token) -> str:
         async def work(sc):
