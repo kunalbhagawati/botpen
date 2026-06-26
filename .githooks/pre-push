@@ -14,7 +14,7 @@ set -euo pipefail
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 
-TARGETS=(src config.py manage.py migrations)
+TARGETS=(src config.py botpen migrations)
 
 # Snapshot the unstaged diff of the lint targets so we can tell whether ruff's
 # --fix changed anything. Hashing the diff (not "is the tree dirty") means a
