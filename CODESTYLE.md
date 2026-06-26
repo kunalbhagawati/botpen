@@ -152,6 +152,34 @@ directly. UTC timestamps come from `botpen.services.utils.utc_now`
   (rich tables / notices); machine output is `click.echo(json.dumps(...))`.
 - Input coercion/rendering helpers live in `commands/utils.py`.
 
+## Hub RPC methods
+
+Every Thrift method on the `Hub` (`commands/serve.py`) follows one shape - match it:
+
+```python
+async def write(self, token, body, recipients) -> str:
+    async def work(sc):                      # depth-1 closure; sc = authenticated scaffold row
+        sid = sc["scaffold_id"]
+        mid, ts = await asyncio.to_thread(   # every blocking / DB call hops to a thread
+            messages_service.write_message, sid, _decode(body), ...
+        )
+        return {"id": mid, "created_at": ts}
+
+    return await self._run("write", token, {"body": body}, work)
+```
+
+- **The logic lives in an inner `async def work(sc)`** - a depth-1 closure (see
+  [Complexity & nesting](#complexity--nesting)). `sc` is the scaffold row `_run` already
+  authenticated from the token.
+- **Return `await self._run("<method>", token, <payload>, work)`.** `_run` resolves the token to a
+  scaffold, runs `work`, records the call to `request_log` (success **and** error), and
+  `json.dumps`-es the result. Don't authenticate, log, or JSON-encode by hand - and don't catch to
+  log; `_run` is the [exception boundary](#exceptions).
+- **Never block the event loop.** The services are sync and the Hub is the single async DB writer,
+  so every service / DB call goes through `await asyncio.to_thread(fn, …)`.
+- The handler name must match `hub.thrift` exactly (thriftpy2 resolves by name). The contribution
+  workflow for adding one is in [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-hub-rpc-method).
+
 ## Output & diagnostics
 
 There is no stdlib `logging` here - the system emits **structured JSON events**, not free-text

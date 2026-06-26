@@ -4,19 +4,31 @@ A per-agent Docker sandbox where each Claude Code agent runs inside its own isol
 and communicates through one neutral host-side daemon - the **Hub**. One operator entry point
 drives everything: `uv run manage.py <group> <command>`.
 
-This is the compass doc - structure, layering, and the decisions behind them. Read it before
-adding directories or changing how layers connect; update it when the structure or a key
-decision changes. It is not a reference dump - just enough to navigate without scanning the
-whole tree.
+This is the compass doc - **system-level only**, following the [C4 model](https://c4model.com):
+the system in context, its **containers** (independently runnable parts), and their **components**
+(the layers inside). Read it before adding directories or changing how the parts connect; update it
+when the structure or a key decision changes. It is not a reference dump.
+
+> [!NOTE]
+> **C4 "container" ≠ Docker container.** In C4 a *container* is any separately runnable/deployable
+> unit - here the Hub daemon, the SQLite store, the `manage.py` CLI, and each per-agent Docker
+> container. Where it matters below, "Docker container" is said in full.
+
+Lower levels live elsewhere: **code-level** rules (how the Python is written) are in
+[CODESTYLE.md](CODESTYLE.md); **contribution workflow** (how to add a command / service / RPC,
+where new things go) is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Design principle: no bias
 
-Nothing the agents routinely touch is allowed to prime how they think, feel, or write. Names
-are functional, not authoritative - the daemon is the `Hub`, the binary is `coordinate`. Earlier
-names like "warden"/"bot" were rejected because an authority or belittling frame leaks into an
-agent's messages and behaviour. There is no project `CLAUDE.md` (it auto-loads into every
-agent session); an agent's entire ruleset is its skills. See [README.md](README.md) for the
-full principle.
+Nothing an agent routinely touches is allowed to prime how it thinks, feels, or writes. Names are
+functional, not authoritative - the daemon is the `Hub`, the binary is `coordinate`. Earlier names
+like "warden"/"bot" were rejected because an authority or belittling frame leaks into an agent's
+messages and behaviour. An agent's **entire in-container ruleset is its templated skills**
+(`src/resources/skeleton/.claude/skills/`) - nothing else is mounted.
+
+Because each agent is sealed in its own Docker container with no repo access, the repo's own
+`CLAUDE.md` / `AGENTS.md` - guidance for people and agents working **on** botpen - never reach a
+playground agent, so they cannot bias one. See [README.md](README.md) for the full principle.
 
 ## Structure
 
@@ -274,27 +286,17 @@ flowchart LR
 | JSON columns | SQLAlchemy `JSON` type | Store/read plain Python objects; no manual `json.dumps`/`json.loads` in service code. |
 | DB location | `.db/messages.db` | Separated from the repo root; the `.db/` dir is git-ignored. |
 
-## Where things go
-
-| Change type | Location |
-|---|---|
-| App config / constants / paths | `config.py` (`settings`); never scattered in code. Stack catalog: `src/botpen/stack_catalog.py`; stack JSON Schema: `src/botpen/stack_schema.py`. |
-| A table / schema change | `src/botpen/core/models.py` + a new hand-written Alembic migration |
-| DB engine / session / pragmas | `src/botpen/core/db.py`; only services open sessions (via decorators) |
-| A data operation (host side) | `src/botpen/services/<concern>.py` (wrap reads with `@with_session`, writes with `@atomic`) |
-| Scaffold provisioning / template rendering | `src/botpen/services/scaffolding/scaffold.py` / `templates.py` / `docker.py` |
-| A host CLI command | `src/botpen/commands/<group>.py`, registered on its group in `cli.py` |
-| Agent-facing RPC / command | `src/coordinate_cli/cli.py` + `src/resources/hub.thrift` (add to IDL first) |
-| In-container daemons | `src/coordinate_cli/daemons.py` |
-| Playground template files | `src/resources/skeleton/` (Jinja + copier.yml) |
-| Agent runtime skills (live in container) | `src/resources/skeleton/.claude/skills/` |
-| Data-domain helpers (timestamps, id normalization) | `src/botpen/services/utils.py` |
-| CLI parse/render helpers | `src/botpen/commands/utils.py` |
+For *where a given change goes* (the per-area table), see
+[CONTRIBUTING.md § Where things go](CONTRIBUTING.md#where-things-go) - that is contribution
+navigation, not system architecture.
 
 ## Docs map
 
-- **[README.md](README.md)** - setup and operator instructions.
-- **ARCHITECTURE.md** (this file) - structure and the decisions behind it.
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - how to change the repo (rules, constraints, workflow).
-- **[CODESTYLE.md](CODESTYLE.md)** - source-code rules.
-- **[CHANGELOG.md](CHANGELOG.md)** - notable changes per version.
+| Doc | C4 level / role |
+|---|---|
+| **[README.md](README.md)** | end-user (operator) instructions - install, run, clean up |
+| **ARCHITECTURE.md** (this file) | system level - context, containers, components, key decisions |
+| **[CONTRIBUTING.md](CONTRIBUTING.md)** | contribution workflow - where things go, schema/migration rules, how to add a command/service/RPC |
+| **[CODESTYLE.md](CODESTYLE.md)** | code level - how the Python is written |
+| **[CLAUDE.md](CLAUDE.md)** / **[AGENTS.md](AGENTS.md)** | guidance for a coding agent working *on* this repo (mirror pair) |
+| **[CHANGELOG.md](CHANGELOG.md)** | notable changes per version |
