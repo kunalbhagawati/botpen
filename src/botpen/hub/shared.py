@@ -7,6 +7,10 @@ directly (`sh -c`), no throwaway helper container. Two callers reach them:
 - the **host** (`botpen scaffold`) fires a throwaway `docker run --rm <hub-image> hub workspace …`
   for one-shot `/shared` work it cannot do itself.
 
+Each scaffold owns one subfolder of `/shared`, named ``<slug>.<scaffold_id>`` (see `workspace_dir`) -
+readable in a file explorer, unique per scaffold. All path-building here takes that dir name; callers
+build it with `workspace_dir` so every side agrees.
+
 This module is deliberately **config-free** - it takes everything it needs as arguments - so a
 throwaway `hub workspace` / `hub permissions` run needs no `.env` mounted into the container.
 """
@@ -21,55 +25,61 @@ from typing import Any
 import arrow
 
 
+def workspace_dir(slug: str, scaffold_id: str) -> str:
+    """The `/shared` subfolder name for a scaffold: ``<slug>.<scaffold_id>`` - readable + unique.
+    The single source of this format; every caller builds the dir name through here."""
+    return f"{slug}.{scaffold_id}"
+
+
 def _helper(script: str) -> None:
     """Run a shared-volume maintenance command directly. The Hub container mounts the shared volume
     at /shared and ships the acl tools, so no throwaway helper container is needed."""
     subprocess.run(["sh", "-c", script], check=True, capture_output=True, text=True)
 
 
-def create_workspace(scaffold_id: str, uid: int, gid: int) -> None:
-    """Create /shared/<scaffold_id>/workspace on the shared volume, owned by uid:gid and
-    mode 0700 so other uids cannot enter or read the folder."""
+def create_workspace(workspace: str, uid: int, gid: int) -> None:
+    """Create /shared/<workspace>/workspace owned by uid:gid and mode 0700 so other uids cannot
+    enter or read the folder. `workspace` is a `workspace_dir` name."""
     _helper(
-        f"mkdir -p /shared/{scaffold_id}/workspace"
-        f" && chown -R {uid}:{gid} /shared/{scaffold_id}"
-        f" && chmod 700 /shared/{scaffold_id}"
+        f"mkdir -p /shared/{workspace}/workspace"
+        f" && chown -R {uid}:{gid} /shared/{workspace}"
+        f" && chmod 700 /shared/{workspace}"
     )
 
 
-def _walk(node: dict, owner_scaffold_id: str, peer_uid: int, base: str = "") -> list[str]:
+def _walk(node: dict, workspace: str, peer_uid: int, base: str = "") -> list[str]:
     """Flatten a grant tree into setfacl argument fragments `[-R ]u:<uid>:<perms> <abs path>`."""
     rel = f"{base}/{node['path']}".strip("/")
-    target = f"/shared/{owner_scaffold_id}/workspace/{rel}"
+    target = f"/shared/{workspace}/workspace/{rel}"
     flag = "-R " if node.get("is_recursive") else ""
     frags = [f'{flag}-m u:{peer_uid}:{node.get("permissions", "rx")} "{target}"']
     for child in node.get("children", []) or []:
-        frags.extend(_walk(child, owner_scaffold_id, peer_uid, rel))
+        frags.extend(_walk(child, workspace, peer_uid, rel))
     return frags
 
 
-def apply_acl(owner_scaffold_id: str, peer_uid: int, grant: Any) -> None:
-    """Apply a grant tree's ACLs for `peer_uid` under the owner's /shared/<scaffold_id>/workspace/.
+def apply_acl(workspace: str, peer_uid: int, grant: Any) -> None:
+    """Apply a grant tree's ACLs for `peer_uid` under /shared/<workspace>/workspace/.
 
     Before per-node grants, grants traverse (x) on the two parent dirs so the peer can reach
     granted paths without being able to ls those folders.
     """
     # Traverse-only access on the parent dirs - x only, not r, so ls is still blocked.
-    _helper(f"setfacl -m u:{peer_uid}:x /shared/{owner_scaffold_id}")
-    _helper(f"setfacl -m u:{peer_uid}:x /shared/{owner_scaffold_id}/workspace")
+    _helper(f"setfacl -m u:{peer_uid}:x /shared/{workspace}")
+    _helper(f"setfacl -m u:{peer_uid}:x /shared/{workspace}/workspace")
     nodes = grant if isinstance(grant, list) else [grant]
     for node in nodes:
-        for frag in _walk(node, owner_scaffold_id, peer_uid):
+        for frag in _walk(node, workspace, peer_uid):
             _helper(f"setfacl {frag}")
 
 
-def revoke_acl(owner_scaffold_id: str, peer_uid: int, grant: Any) -> None:
-    """Remove `peer_uid`'s ACL entries for the grant tree's paths."""
+def revoke_acl(workspace: str, peer_uid: int, grant: Any) -> None:
+    """Remove `peer_uid`'s ACL entries for the grant tree's paths under /shared/<workspace>/."""
     nodes = grant if isinstance(grant, list) else [grant]
     for node in nodes:
         rel = node["path"].strip("/")
         flag = "-R " if node.get("is_recursive") else ""
-        _helper(f'setfacl {flag}-x u:{peer_uid} "/shared/{owner_scaffold_id}/workspace/{rel}"')
+        _helper(f'setfacl {flag}-x u:{peer_uid} "/shared/{workspace}/workspace/{rel}"')
 
 
 def reap_stopped(after_mins: int, playgrounds_dir: Path) -> list[str]:
@@ -101,9 +111,8 @@ def reap_stopped(after_mins: int, playgrounds_dir: Path) -> list[str]:
         for p in playgrounds_dir.glob(f"*.{slug}"):
             parts = p.name.split(".", 2)
             if len(parts) == 3:
-                scaffold_id = parts[1]
                 try:
-                    _helper(f"rm -rf /shared/{scaffold_id}")
+                    _helper(f"rm -rf /shared/{workspace_dir(parts[2], parts[1])}")
                 except Exception:
                     pass
             shutil.rmtree(p, ignore_errors=True)

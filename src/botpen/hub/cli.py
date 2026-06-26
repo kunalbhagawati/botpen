@@ -42,23 +42,23 @@ def permissions() -> None:
 
 
 @permissions.command("grant")
-@click.argument("owner_scaffold_id")
+@click.argument("owner_workspace")
 @click.argument("peer_uid", type=int)
 @click.argument("grant_json")
-def permissions_grant(owner_scaffold_id: str, peer_uid: int, grant_json: str) -> None:
-    """Grant PEER_UID the ACLs described by GRANT_JSON (a grant tree) under OWNER's workspace."""
-    shared_ops.apply_acl(owner_scaffold_id, peer_uid, json.loads(grant_json))
-    click.echo(json.dumps({"ok": True, "op": "grant", "owner": owner_scaffold_id, "peer_uid": peer_uid}))
+def permissions_grant(owner_workspace: str, peer_uid: int, grant_json: str) -> None:
+    """Grant PEER_UID the ACLs in GRANT_JSON (a grant tree) under OWNER_WORKSPACE's /shared folder."""
+    shared_ops.apply_acl(owner_workspace, peer_uid, json.loads(grant_json))
+    click.echo(json.dumps({"ok": True, "op": "grant", "owner": owner_workspace, "peer_uid": peer_uid}))
 
 
 @permissions.command("revoke")
-@click.argument("owner_scaffold_id")
+@click.argument("owner_workspace")
 @click.argument("peer_uid", type=int)
 @click.argument("grant_json")
-def permissions_revoke(owner_scaffold_id: str, peer_uid: int, grant_json: str) -> None:
-    """Revoke PEER_UID's ACLs for the paths in GRANT_JSON under OWNER's workspace."""
-    shared_ops.revoke_acl(owner_scaffold_id, peer_uid, json.loads(grant_json))
-    click.echo(json.dumps({"ok": True, "op": "revoke", "owner": owner_scaffold_id, "peer_uid": peer_uid}))
+def permissions_revoke(owner_workspace: str, peer_uid: int, grant_json: str) -> None:
+    """Revoke PEER_UID's ACLs for the paths in GRANT_JSON under OWNER_WORKSPACE's /shared folder."""
+    shared_ops.revoke_acl(owner_workspace, peer_uid, json.loads(grant_json))
+    click.echo(json.dumps({"ok": True, "op": "revoke", "owner": owner_workspace, "peer_uid": peer_uid}))
 
 
 @hub.group("workspace")
@@ -67,13 +67,13 @@ def workspace() -> None:
 
 
 @workspace.command("create")
-@click.argument("scaffold_id")
+@click.argument("workspace_dir")
 @click.argument("uid", type=int)
 @click.argument("gid", type=int)
-def workspace_create(scaffold_id: str, uid: int, gid: int) -> None:
-    """Create /shared/SCAFFOLD_ID/workspace owned by UID:GID, mode 0700."""
-    shared_ops.create_workspace(scaffold_id, uid, gid)
-    click.echo(json.dumps({"ok": True, "scaffold": scaffold_id, "uid": uid, "gid": gid}))
+def workspace_create(workspace_dir: str, uid: int, gid: int) -> None:
+    """Create /shared/WORKSPACE_DIR/workspace owned by UID:GID, mode 0700."""
+    shared_ops.create_workspace(workspace_dir, uid, gid)
+    click.echo(json.dumps({"ok": True, "workspace": workspace_dir, "uid": uid, "gid": gid}))
 
 
 @hub.command("reap")

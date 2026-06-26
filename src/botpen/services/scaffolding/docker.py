@@ -22,8 +22,8 @@ def ensure_shared_volume() -> None:
     subprocess.run(["docker", "volume", "create", settings.SHARED_VOLUME_NAME], check=True, capture_output=True)
 
 
-def ensure_agent_dir(scaffold_id: str, uid: int, gid: int) -> None:
-    """Create /shared/<scaffold_id>/workspace owned by uid:gid (mode 0700).
+def ensure_agent_dir(workspace_dir: str, uid: int, gid: int) -> None:
+    """Create /shared/<workspace_dir>/workspace owned by uid:gid (mode 0700).
 
     The shared volume lives inside the Docker VM, so the host can't mkdir/chown on it directly; a
     throwaway Hub container with the volume mounted does it via `hub workspace create`."""
@@ -37,7 +37,7 @@ def ensure_agent_dir(scaffold_id: str, uid: int, gid: int) -> None:
             hub_service.HUB_IMAGE,
             "workspace",
             "create",
-            scaffold_id,
+            workspace_dir,
             str(uid),
             str(gid),
         ],

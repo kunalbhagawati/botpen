@@ -212,13 +212,13 @@ class Hub:
 
         return await self._run("perm_ask", token, {"peer": peer_scaffold_id, "reason": reason}, work)
 
-    async def _apply_or_fail(self, row, owner_scaffold_id, peer_scaffold_id, tree, fn) -> dict:
-        """Apply (or revoke) the ACL on /shared; close the log row accordingly."""
+    async def _apply_or_fail(self, row, owner_workspace, peer_scaffold_id, tree, fn) -> dict:
+        """Apply (or revoke) the ACL on /shared/<owner_workspace>; close the log row accordingly."""
         peer = await asyncio.to_thread(scaffold_service.get_by_id, peer_scaffold_id)
         try:
             if peer is None:
                 raise ValueError(f"unknown peer scaffold {peer_scaffold_id}")
-            await asyncio.to_thread(fn, owner_scaffold_id, peer["uid"], tree)
+            await asyncio.to_thread(fn, owner_workspace, peer["uid"], tree)
             await asyncio.to_thread(permissions_service.mark_applied, row["id"])
             row["status"] = "revoked" if row["permission_type"] == "revoke" else "applied"
         except Exception as e:
@@ -233,7 +233,8 @@ class Hub:
             row = await asyncio.to_thread(
                 permissions_service.log_grant, sc["scaffold_id"], peer_scaffold_id, tree, reason or None
             )
-            return await self._apply_or_fail(row, sc["scaffold_id"], peer_scaffold_id, tree, shared_ops.apply_acl)
+            owner_ws = shared_ops.workspace_dir(sc["slug"], sc["scaffold_id"])
+            return await self._apply_or_fail(row, owner_ws, peer_scaffold_id, tree, shared_ops.apply_acl)
 
         return await self._run(
             "perm_grant", token, {"peer": peer_scaffold_id, "grant": thrift_grant_to_dict(grant)}, work
@@ -245,7 +246,8 @@ class Hub:
             row = await asyncio.to_thread(
                 permissions_service.log_revoke, sc["scaffold_id"], peer_scaffold_id, tree, reason or None
             )
-            return await self._apply_or_fail(row, sc["scaffold_id"], peer_scaffold_id, tree, shared_ops.revoke_acl)
+            owner_ws = shared_ops.workspace_dir(sc["slug"], sc["scaffold_id"])
+            return await self._apply_or_fail(row, owner_ws, peer_scaffold_id, tree, shared_ops.revoke_acl)
 
         return await self._run(
             "perm_revoke", token, {"peer": peer_scaffold_id, "grant": thrift_grant_to_dict(grant)}, work

@@ -23,6 +23,7 @@ import questionary
 from config import settings
 
 from ..core.db import ensure_db
+from ..hub.shared import workspace_dir
 from ..services.scaffolding import docker as docker_service
 from ..services.scaffolding import scaffold as scaffold_service
 from ..services.scaffolding import templates as templates_service
@@ -222,7 +223,7 @@ def _provision_one(spec: BotSpec) -> str:
     container = f"botpen-{name}"
     console.print(f"  building [bold]{container}[/bold] (first build pulls + compiles, give it a minute) ...")
     docker_service.ensure_shared_volume()
-    docker_service.ensure_agent_dir(sc["scaffold_id"], sc["uid"], sc["gid"])
+    docker_service.ensure_agent_dir(workspace_dir(name, sc["scaffold_id"]), sc["uid"], sc["gid"])
     docker_service.build_and_up(dest)
     scaffold_service.set_status(sc["scaffold_id"], "running", container_name=container)
     box(

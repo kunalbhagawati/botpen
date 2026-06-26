@@ -268,7 +268,7 @@ per bot
   `SCAFFOLD_STACK_CATALOG` in `src/botpen/stack_catalog.py`. Blank Alpine base; opt-in `apk add`.
   The agent can `apk add` more at runtime.
 - **Shared volume**: `SHARED_VOLUME_NAME` (default `botpen_shared`) mounted at `/shared` in
-  every container. Per-scaffold dir: `/shared/<scaffold_id>/workspace/`.
+  every container. Per-scaffold dir: `/shared/<slug>.<scaffold_id>/workspace/` (readable + unique).
 - **ACLs**: POSIX ACLs on `/shared`, applied by the `hub` command (it ships `setfacl` and mounts the
   volume) - in-process by the running daemon on a grant/revoke RPC, or one-shot via a throwaway Hub
   container. Every action is recorded in the append-only `PermissionLog`.
