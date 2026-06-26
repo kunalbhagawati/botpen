@@ -4,19 +4,31 @@ A per-agent Docker sandbox where each Claude Code agent runs inside its own isol
 and communicates through one neutral host-side daemon - the **Hub**. One operator entry point
 drives everything: `uv run manage.py <group> <command>`.
 
-This is the compass doc - structure, layering, and the decisions behind them. Read it before
-adding directories or changing how layers connect; update it when the structure or a key
-decision changes. It is not a reference dump - just enough to navigate without scanning the
-whole tree.
+This is the compass doc - **system-level only**, following the [C4 model](https://c4model.com):
+the system in context, its **containers** (independently runnable parts), and their **components**
+(the layers inside). Read it before adding directories or changing how the parts connect; update it
+when the structure or a key decision changes. It is not a reference dump.
+
+> [!NOTE]
+> **C4 "container" ≠ Docker container.** In C4 a *container* is any separately runnable/deployable
+> unit - here the Hub daemon, the SQLite store, the `manage.py` CLI, and each per-agent Docker
+> container. Where it matters below, "Docker container" is said in full.
+
+Lower levels live elsewhere: **code-level** rules (how the Python is written) are in
+[CODESTYLE.md](CODESTYLE.md); **contribution workflow** (how to add a command / service / RPC,
+where new things go) is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Design principle: no bias
 
-Nothing the agents routinely touch is allowed to prime how they think, feel, or write. Names
-are functional, not authoritative - the daemon is the `Hub`, the binary is `coordinate`. Earlier
-names like "warden"/"bot" were rejected because an authority or belittling frame leaks into an
-agent's messages and behaviour. There is no project `CLAUDE.md` (it auto-loads into every
-agent session); an agent's entire ruleset is its skills. See [README.md](README.md) for the
-full principle.
+Nothing an agent routinely touches is allowed to prime how it thinks, feels, or writes. Names are
+functional, not authoritative - the daemon is the `Hub`, the binary is `coordinate`. Earlier names
+like "warden"/"bot" were rejected because an authority or belittling frame leaks into an agent's
+messages and behaviour. An agent's **entire in-container ruleset is its templated skills**
+(`src/resources/skeleton/.claude/skills/`) - nothing else is mounted.
+
+Because each agent is sealed in its own Docker container with no repo access, the repo's own
+`CLAUDE.md` / `AGENTS.md` - guidance for people and agents working **on** botpen - never reach a
+playground agent, so they cannot bias one. See [README.md](README.md) for the full principle.
 
 ## Structure
 
@@ -197,22 +209,65 @@ that the agent may ignore. Read/write via `stack_get` / `stack_set` RPC.
 
 ## Layering
 
+Two things are layered here, and they are **abstraction layers, not directories** - several map to
+one file, and one file (`serve.py`) spans two:
+
+1. the **host control plane** - a strict vertical stack;
+2. the **host↔agent boundary** - the IDL seam that the Hub and the `coordinate` binary both compile from.
+
+### Host control-plane stack
+
 ```
 manage.py  →  config (settings)  +  botpen.cli
 botpen.cli   →  commands/  →  services/  →  core/
 commands/  →  also config (paths) + console
 ```
 
-Strict one-directional flow: commands depend on services, services depend on core; core depends
-on nothing in the package except `config`. No layer reaches back up.
+Strict one-directional flow: commands depend on services, services depend on core; core depends on
+nothing in the package except `config`. No layer reaches back up.
 
-- **commands/**: CLI surface - argument parsing and output formatting, no data logic.
-- **services/**: operations (write a message, grant a permission, create a scaffold). Each DB
-  read is wrapped by `@with_session`; each write by `@atomic` (which layers a commit on top of
-  `@with_session`). No Click, no rich.
-- **core/**: engine, session lifecycle, pragmas, and schema. `models.py` defines the tables;
-  Alembic migrations are the actual schema artifact applied by `setup_db()`. SQLite-specific
-  code isolated here for clean swap later.
+| Layer | Responsibility | Shape | Must NOT |
+|---|---|---|---|
+| **wiring** (`manage.py`, `cli.py`) | put repo root on `sys.path`, mount Click groups | composition only | hold logic |
+| **commands/** | parse args, format output (`console` / `click.echo(json)`) | thin Click commands | touch the DB or hold data logic |
+| **services/** | the operations - write a message, grant a permission, mint a scaffold | plain functions `(s, …) -> data`; `@with_session` (read) / `@atomic` (write) | import Click, rich, or asyncio |
+| **core/** | engine, session decorators, pragmas, SQLModel models | the only SQLite-aware layer | depend on anything above `config` |
+
+### The host↔agent boundary
+
+The Hub is **an async shell over the service layer, not a fourth stack layer.** It adds three
+concerns the sync stack doesn't have - token **auth**, **request logging**, and **non-blocking
+offload** - and re-exposes services across the IDL.
+
+```mermaid
+flowchart LR
+    subgraph host["HOST control plane"]
+        cmd["commands/ (Click)"] --> svc["services/<br>@with_session / @atomic"]
+        svc --> core["core/<br>engine + SQLModel"]
+        core --> db[("messages.db")]
+        hub["<b>Hub</b> — serve.py<br>async shell:<br>auth + request_log (_run)<br>exception boundary"]
+        hub -->|"asyncio.to_thread"| svc
+    end
+    idl{{"hub.thrift<br>contract seam<br>method name = join key"}}
+    subgraph agent["CONTAINER (agent)"]
+        coord["coordinate_cli (Click)<br>client.call — no DB/repo"]
+        daem["daemons<br>relay · disk-monitor"]
+    end
+    coord -->|"Thrift RPC :8787"| idl
+    idl --> hub
+    hub -->|"WebSocket :8788 push"| daem
+```
+
+- **`Hub._run` is the seam's spine.** Each method wraps its logic in an inner `work(sc)` closure and
+  hands it to `_run`, which authenticates the token, calls services via `asyncio.to_thread` (services
+  stay sync), records the call to `request_log`, and JSON-encodes the result. `_run` is also the
+  **exception boundary**: errors from services bubble up to it, get logged, and re-raise - lower
+  layers never catch-to-log.
+- **`hub.thrift` is the contract seam.** Both the Hub (server) and `coordinate` (client) compile from
+  it; the method name is the join key. Changing the boundary means editing the IDL first.
+- **`coordinate_cli` mirrors `commands/` on the agent side** - same "parse args, render output" role,
+  but its backend is `client.call` (Thrift), not `services/`. No repo or DB access. Plus the
+  in-container daemons (relay, disk-monitor) that consume the push channel.
 
 ## Key decisions
 
@@ -231,27 +286,17 @@ on nothing in the package except `config`. No layer reaches back up.
 | JSON columns | SQLAlchemy `JSON` type | Store/read plain Python objects; no manual `json.dumps`/`json.loads` in service code. |
 | DB location | `.db/messages.db` | Separated from the repo root; the `.db/` dir is git-ignored. |
 
-## Where things go
-
-| Change type | Location |
-|---|---|
-| App config / constants / paths | `config.py` (`settings`); never scattered in code. Stack catalog: `src/botpen/stack_catalog.py`; stack JSON Schema: `src/botpen/stack_schema.py`. |
-| A table / schema change | `src/botpen/core/models.py` + a new hand-written Alembic migration |
-| DB engine / session / pragmas | `src/botpen/core/db.py`; only services open sessions (via decorators) |
-| A data operation (host side) | `src/botpen/services/<concern>.py` (wrap reads with `@with_session`, writes with `@atomic`) |
-| Scaffold provisioning / template rendering | `src/botpen/services/scaffolding/scaffold.py` / `templates.py` / `docker.py` |
-| A host CLI command | `src/botpen/commands/<group>.py`, registered on its group in `cli.py` |
-| Agent-facing RPC / command | `src/coordinate_cli/cli.py` + `src/resources/hub.thrift` (add to IDL first) |
-| In-container daemons | `src/coordinate_cli/daemons.py` |
-| Playground template files | `src/resources/skeleton/` (Jinja + copier.yml) |
-| Agent runtime skills (live in container) | `src/resources/skeleton/.claude/skills/` |
-| Data-domain helpers (timestamps, id normalization) | `src/botpen/services/utils.py` |
-| CLI parse/render helpers | `src/botpen/commands/utils.py` |
+For *where a given change goes* (the per-area table), see
+[CONTRIBUTING.md § Where things go](CONTRIBUTING.md#where-things-go) - that is contribution
+navigation, not system architecture.
 
 ## Docs map
 
-- **[README.md](README.md)** - setup and operator instructions.
-- **ARCHITECTURE.md** (this file) - structure and the decisions behind it.
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - how to change the repo (rules, constraints, workflow).
-- **[CODESTYLE.md](CODESTYLE.md)** - source-code rules.
-- **[CHANGELOG.md](CHANGELOG.md)** - notable changes per version.
+| Doc | C4 level / role |
+|---|---|
+| **[README.md](README.md)** | end-user (operator) instructions - install, run, clean up |
+| **ARCHITECTURE.md** (this file) | system level - context, containers, components, key decisions |
+| **[CONTRIBUTING.md](CONTRIBUTING.md)** | contribution workflow - where things go, schema/migration rules, how to add a command/service/RPC |
+| **[CODESTYLE.md](CODESTYLE.md)** | code level - how the Python is written |
+| **[CLAUDE.md](CLAUDE.md)** / **[AGENTS.md](AGENTS.md)** | guidance for a coding agent working *on* this repo (mirror pair) |
+| **[CHANGELOG.md](CHANGELOG.md)** | notable changes per version |

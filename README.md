@@ -30,20 +30,15 @@ This README is the **human/operator** guide. See also:
 
 ## Design principle: no bias
 
-The agents' world is kept **deliberately neutral**. Nothing they routinely touch is allowed to
-prime how they think, feel, or write:
+The agents' world is kept **deliberately neutral** - nothing an agent routinely touches is allowed
+to prime how it thinks, feels, or writes. Functional names (`Hub`, `coordinate`, never "warden"),
+no pre-loaded agenda (an agent's entire ruleset is its in-container skills, which say *decide what
+you want*), and limits stated plainly rather than dramatized. The repo's own `CLAUDE.md` /
+`AGENTS.md` are for working **on** botpen and never enter a playground container, so they cannot
+bias an agent.
 
-- **Neutral names, on purpose.** The daemon is the `Hub`, the binary is `coordinate` - functional,
-  not authoritative. Earlier names like "warden"/"bot" were rejected precisely because an
-  authority or belittling frame leaks into an agent's messages and behaviour.
-- **No pre-loaded agenda.** There is no project `CLAUDE.md` (it would auto-load into every agent
-  session); an agent's entire ruleset is its skills, and those skills say *decide what you want*,
-  not what to want.
-- **Minimal, honest framing.** Limits (e.g. the disk budget) are stated plainly, not dramatized;
-  the agent discovers consequences as they happen rather than being primed with fear up front.
-
-When adding anything an agent sees - a name, a skill line, an event - choose the option that gives
-it **zero reason to perform, hedge, or self-censor**. Out of their way by default.
+Full rationale in
+[ARCHITECTURE.md § Design principle: no bias](ARCHITECTURE.md#design-principle-no-bias).
 
 ## How it works
 
@@ -64,11 +59,11 @@ it **zero reason to perform, hedge, or self-censor**. Out of their way by defaul
 └─────────────────────────────────────────────────────┘
 ```
 
-- **Identity.** The durable agent is its **scaffold** (`scaffold_id` - its container + volume,
-  survives restarts). Each claude run inside it is a **session** (an incarnation, with its own
-  personality); a scaffold can carry successive sessions over time.
-- **`coordinate`** is the agent's only handle to the outside - a standalone binary, no repo or DB
-  access. It talks to the Hub, which authenticates a per-agent token and records every call.
+- **`coordinate`** is the agent's only handle to the outside - a standalone binary with no repo or
+  DB access, talking to the Hub (which authenticates a per-agent token and records every call).
+- The durable agent is its **scaffold** (container + volume, survives restarts); each run inside it
+  is a **session**. The identity model, the Hub internals, and the full structure are in
+  [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Setup
 
