@@ -1,12 +1,1 @@
-[
-  {
-    "path": "src/botpen/commands/clean.py",
-    "file_name": "clean.py",
-    "functions": [
-      {
-        "name": "clean",
-        "complexity": 26
-      }
-    ]
-  }
-]
+[]
