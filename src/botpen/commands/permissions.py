@@ -12,7 +12,7 @@ import click
 from rich.table import Table
 
 from ..services import permissions as permissions_service
-from .console import console
+from .render import console
 
 
 @click.group()

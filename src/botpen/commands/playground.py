@@ -6,186 +6,19 @@ config list and provisioning each with auto_start_bot=True + bot_auto_proceed=Tr
 
 from __future__ import annotations
 
-import json
 import shutil
 from itertools import cycle
 from pathlib import Path
 
 import click
-from rich.panel import Panel
-from rich.table import Table
 
-from ..stack_catalog import SCAFFOLD_STACK_CATALOG
-from .console import box, console
-from .scaffold import scaffold
 from ..core.db import setup_db
 from config import settings
 
 from ..services.scaffolding import docker as docker_service
-
-# ---------------------------------------------------------------------------
-# Model choices - single source of truth; scaffold.py uses click.Choice inline
-# so we derive the list by introspecting that option rather than duplicating it.
-# ---------------------------------------------------------------------------
-_MODEL_CHOICES: list[str] = ["opus", "sonnet", "haiku", "default"]
-
-
-# ---------------------------------------------------------------------------
-# Config parsing
-# ---------------------------------------------------------------------------
-
-
-def _parse_stack_config(raw_stack) -> list[str]:
-    """Normalize a ScaffoldStackConfig to a flat list of stack item name strings.
-
-    Accepts:
-      - ["python", "redis"]                            -> ["python", "redis"]
-      - ["python", {"extra": "cfg"}]                   -> ["python"]  (2-elem [name, config])
-      - [{"name": "python", "config": {...}}, ...]     -> ["python", ...]
-    """
-    names: list[str] = []
-    if not isinstance(raw_stack, list):
-        return names
-    i = 0
-    while i < len(raw_stack):
-        item = raw_stack[i]
-        if isinstance(item, str):
-            # Could be a bare name or the first element of a [name, config] pair
-            if i + 1 < len(raw_stack) and isinstance(raw_stack[i + 1], dict):
-                # [name, config] pair - consume both
-                names.append(item)
-                # TODO: stack item extra config not yet wired
-                i += 2
-            else:
-                names.append(item)
-                i += 1
-        elif isinstance(item, dict):
-            # {"name": ..., "config": {...}}
-            key = item.get("name") or item.get("key")
-            if isinstance(key, str):
-                names.append(key)
-            # TODO: stack item extra config not yet wired
-            i += 1
-        else:
-            i += 1
-    return names
-
-
-def _normalize_item(raw_item) -> tuple[str, list[str]]:
-    """Normalize a ScaffoldItemConfig to (model, stack_items).
-
-    Accepts:
-      - "haiku"                                         -> ("haiku", [])
-      - ["haiku", ["python", "redis"]]                  -> ("haiku", ["python", "redis"])
-      - {"model": "haiku", "stack": ["python"]}         -> ("haiku", ["python"])
-    """
-    if isinstance(raw_item, str):
-        return raw_item, []
-    if isinstance(raw_item, list) and len(raw_item) >= 1 and isinstance(raw_item[0], str):
-        model = raw_item[0]
-        stack_raw = raw_item[1] if len(raw_item) >= 2 else []
-        return model, _parse_stack_config(stack_raw)
-    if isinstance(raw_item, dict):
-        model = raw_item.get("model", "default")
-        stack_raw = raw_item.get("stack", [])
-        return str(model), _parse_stack_config(stack_raw if isinstance(stack_raw, list) else [])
-    raise click.BadParameter(f"unrecognized scaffold config item: {raw_item!r}", param_hint="--scaffold-config")
-
-
-def _parse_scaffold_config(raw: str) -> list[tuple[str, list[str]]]:
-    """Parse -c value into a list of (model, stack_items) tuples.
-
-    Resolution order:
-      1. If raw names an existing file, read its contents.
-      2. Try json.loads. If it yields a list -> array-of-items form.
-         If it yields a string, or raises -> treat as comma-separated model names.
-    """
-    source = raw
-    p = Path(raw)
-    if p.exists() and p.is_file():
-        source = p.read_text()
-
-    try:
-        parsed = json.loads(source)
-    except json.JSONDecodeError, ValueError:
-        parsed = source  # treat as comma-separated string
-
-    if isinstance(parsed, list):
-        return [_normalize_item(item) for item in parsed]
-
-    # String path: comma-separated model names
-    tokens = str(parsed).split(",")
-    return [_normalize_item(tok.strip()) for tok in tokens if tok.strip()]
-
-
-# ---------------------------------------------------------------------------
-# Validation
-# ---------------------------------------------------------------------------
-
-
-def _validate_model(model: str) -> None:
-    if model not in _MODEL_CHOICES:
-        raise click.BadParameter(
-            f"model {model!r} is not one of {_MODEL_CHOICES}",
-            param_hint="--scaffold-config",
-        )
-
-
-def _validate_and_group_stack(stack_items: list[str]) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
-    """Map stack item names to (languages, dbs, tools) tuples, raising BadParameter for unknowns."""
-    languages: list[str] = []
-    dbs: list[str] = []
-    tools: list[str] = []
-
-    all_keys: dict[str, str] = {}  # key -> category
-    for category, entries in SCAFFOLD_STACK_CATALOG.items():
-        for entry in entries:
-            all_keys[str(entry["key"])] = category
-
-    for item in stack_items:
-        cat = all_keys.get(item)
-        if cat is None:
-            valid = list(all_keys.keys())
-            raise click.BadParameter(
-                f"stack item {item!r} not found in catalog (valid: {valid})",
-                param_hint="--scaffold-config",
-            )
-        if cat == "language":
-            languages.append(item)
-        elif cat == "db":
-            dbs.append(item)
-        elif cat == "tools":
-            tools.append(item)
-
-    return tuple(languages), tuple(dbs), tuple(tools)
-
-
-# ---------------------------------------------------------------------------
-# Plan display
-# ---------------------------------------------------------------------------
-
-
-def _print_plan(agent_configs: list[tuple[int, str, list[str], str]], mapping_rule: str) -> None:
-    """Print the resolved agent plan as a boxed rich table."""
-    table = Table(show_header=True, header_style="bold cyan", expand=True)
-    table.add_column("#", style="dim", width=4)
-    table.add_column("Model", style="bold")
-    table.add_column("Stack items")
-
-    for idx, model, stack_items, _ in agent_configs:
-        table.add_row(
-            str(idx),
-            model,
-            ", ".join(stack_items) if stack_items else "[dim](none)[/dim]",
-        )
-
-    panel = Panel(
-        table,
-        title=f"[bold]Playground plan[/bold]  ({mapping_rule})",
-        border_style="blue",
-        padding=(0, 1),
-    )
-    console.print(panel)
+from .render import box, console, print_plan
+from .scaffold import scaffold
+from .utils import parse_scaffold_config, validate_and_group_stack, validate_model
 
 
 # ---------------------------------------------------------------------------
@@ -279,13 +112,13 @@ def start(num_agents: int, scaffold_config: str) -> None:
 
     setup_db()
 
-    raw_configs = _parse_scaffold_config(scaffold_config)
+    raw_configs = parse_scaffold_config(scaffold_config)
     if not raw_configs:
         raise click.BadParameter("no valid configs found", param_hint="--scaffold-config")
 
     # Validate models
     for model, _ in raw_configs:
-        _validate_model(model)
+        validate_model(model)
 
     # Map configs -> N agents (1:1, round-robin, or truncate)
     n = len(raw_configs)
@@ -304,12 +137,12 @@ def start(num_agents: int, scaffold_config: str) -> None:
     for i, (model, stack_items) in enumerate(assigned, start=1):
         agent_specs.append((i, model, stack_items, mapping_rule))
 
-    _print_plan(agent_specs, mapping_rule)
+    print_plan(agent_specs, mapping_rule)
 
     # Provision each agent. scaffold.callback is set by @click.command (Optional only in the type).
     assert scaffold.callback is not None
     for i, model, stack_items, _ in agent_specs:
-        languages, dbs, tools = _validate_and_group_stack(stack_items)
+        languages, dbs, tools = validate_and_group_stack(stack_items)
         console.rule(f"[bold blue]Provisioning agent {i}/{num_agents}[/bold blue]")
         scaffold.callback(
             slug=None,

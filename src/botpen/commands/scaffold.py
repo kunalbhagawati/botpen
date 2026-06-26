@@ -12,35 +12,17 @@ import sys
 import time
 
 import click
-import questionary
 
 # pyrefly: ignore [missing-import]
 from config import settings
 
 from ..core.db import ensure_db
-from ..stack_catalog import SCAFFOLD_STACK_CATALOG
 from ..services import hub as hub_service
 from ..services.scaffolding import docker as docker_service
 from ..services.scaffolding import scaffold as scaffold_service
 from ..services.scaffolding import templates as templates_service
-from .console import box, console
-
-
-def _resolve_stack(flags: dict[str, tuple[str, ...]], interactive: bool) -> dict[str, list[str]]:
-    """Resolve each catalog category to a chosen SUBSET: explicit flags, an interactive
-    multi-select, or empty (blank Alpine). Iterates the catalog, so new categories appear in the
-    form without touching this code."""
-    stack: dict[str, list[str]] = {}
-    for category, entries in SCAFFOLD_STACK_CATALOG.items():
-        keys = [e["key"] for e in entries]
-        chosen = list(flags.get(category) or ())
-        if not chosen and interactive:
-            chosen = questionary.checkbox(f"{category}?", choices=keys).ask() or []
-        for k in chosen:
-            if k not in keys:
-                raise click.BadParameter(f"{category}: '{k}' not in {keys}")
-        stack[category] = chosen
-    return stack
+from .render import box, console
+from .utils import resolve_stack
 
 
 @click.command()
@@ -82,7 +64,7 @@ def scaffold(
     flags = {"language": languages, "db": dbs, "tools": tools}
     any_flag = any(flags.values())
     interactive = not yes and not any_flag and sys.stdin.isatty()
-    stack = _resolve_stack(flags, interactive)
+    stack = resolve_stack(flags, interactive)
 
     ensure_db()  # self-heal the schema if it was wiped (e.g. teardown --db)
     if not no_serve and hub_service.ensure_hub():  # an auto-started bot needs the Hub reachable
