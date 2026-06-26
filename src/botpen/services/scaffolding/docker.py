@@ -9,6 +9,7 @@ in a throwaway Hub container (`ensure_agent_dir` below) or done in-process by th
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -48,9 +49,12 @@ def ensure_agent_dir(workspace_dir: str, uid: int, gid: int) -> None:
 
 
 def build_and_up(playground: Path) -> None:
-    """`docker compose build` + `up -d` for a playground (blocking)."""
+    """`docker compose build` + `up -d` for a playground (blocking). All agents share the `botpen`
+    compose project, so each `up` sees the others as orphans - COMPOSE_IGNORE_ORPHANS silences that.
+    Must NOT use --remove-orphans, which would delete the peer agents."""
     compose = str(playground / "docker-compose.yml")
-    subprocess.run(["docker", "compose", "-f", compose, "up", "-d", "--build"], check=True)
+    env = {**os.environ, "COMPOSE_IGNORE_ORPHANS": "1"}
+    subprocess.run(["docker", "compose", "-f", compose, "up", "-d", "--build"], check=True, env=env)
 
 
 def attach(container_name: str) -> None:

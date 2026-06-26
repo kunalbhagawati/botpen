@@ -11,6 +11,7 @@ so it must never start a second daemon.
 
 from __future__ import annotations
 
+import os
 import subprocess
 
 from config import settings
@@ -50,5 +51,7 @@ def ensure_hub() -> bool:
         ["docker", "compose", "-f", str(settings.WORKING_DIR / _HUB_COMPOSE), "up", "-d", "--build"],
         cwd=settings.WORKING_DIR,
         check=True,
+        # Hub + agents share the `botpen` compose project; ignore (don't remove) orphan peers.
+        env={**os.environ, "COMPOSE_IGNORE_ORPHANS": "1"},
     )
     return True
