@@ -125,31 +125,27 @@ def reap_stopped(after_mins: int) -> list[str]:
     return reaped
 
 
-def teardown(components: list[str], stopped_only: bool = False) -> dict:
-    """Clean up playground folders and the selected Docker components.
-
-    Always removes all playground folders.  Then, for each entry in `components`
-    (values: ``containers``, ``images``, ``volumes``):
-    - ``containers``: list ``botpen-`` containers (exited-only when ``stopped_only``),
-      then ``docker rm -f`` each.
+def teardown(components: list[str]) -> dict:
+    """Remove the selected Docker artifacts for botpen. `components` is a subset of
+    {``containers``, ``images``, ``volumes``}:
+    - ``containers``: ``docker rm -f`` every ``botpen-`` container.
     - ``images``: ``docker rmi -f`` every ``botpen-*`` image (agents + the Hub).
-    - ``volumes``: remove every ``botpen`` volume except the DB (shared volume + any stale
-      per-agent workspace volumes from earlier models); the DB volume is gated behind ``--db``.
+    - ``volumes``: remove every ``botpen`` volume (shared + any stale per-agent workspace volumes).
 
-    Also removes every ``botpen`` network (the shared net + any per-project ``_default`` leftovers).
-    Returns a summary dict with removal counts.
+    Also removes every ``botpen`` network when containers are torn down. Playground folders and the
+    DB are handled by the caller (the `clean` command). Returns removal counts.
     """
-    ps_cmd = ["docker", "ps", "-a", "--filter", "name=botpen-", "--format", "{{.Names}}"]
-    if stopped_only:
-        ps_cmd += ["--filter", "status=exited"]
-
     removed_containers: list[str] = []
     removed_images: list[str] = []
     removed_volumes: list[str] = []
     removed_networks: list[str] = []
 
     if "containers" in components:
-        names = subprocess.run(ps_cmd, capture_output=True, text=True).stdout.split()
+        names = subprocess.run(
+            ["docker", "ps", "-a", "--filter", "name=botpen-", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+        ).stdout.split()
         for name in names:
             subprocess.run(["docker", "rm", "-f", name], capture_output=True)
         removed_containers = names
@@ -168,37 +164,27 @@ def teardown(components: list[str], stopped_only: bool = False) -> dict:
         removed_images = list(imgs)
 
     if "volumes" in components:
-        # Every botpen volume EXCEPT the DB (gated behind --db in the command) - catches the shared
-        # volume and any stale per-agent workspace volumes from earlier models.
+        # Every botpen volume - the shared volume + any stale per-agent workspace volumes.
         vols = subprocess.run(
             ["docker", "volume", "ls", "-q", "--filter", "name=botpen"], capture_output=True, text=True
         ).stdout.split()
-        for v in (v for v in vols if v != "botpen-db"):
+        for v in vols:
             subprocess.run(["docker", "volume", "rm", "-f", v], capture_output=True)
             removed_volumes.append(v)
 
-    # Every botpen network (best-effort - the shared `botpen` net plus any per-project `_default`
-    # leftovers). Only removable once its containers are gone, which the `containers` component above
-    # handles (the Hub container included via the botpen- filter).
-    nets = subprocess.run(
-        ["docker", "network", "ls", "-q", "--filter", "name=botpen"], capture_output=True, text=True
-    ).stdout.split()
-    for n in nets:
-        if subprocess.run(["docker", "network", "rm", n], capture_output=True).returncode == 0:
-            removed_networks.append(n)
-
-    playgrounds = settings.WORKING_DIR / "playgrounds"
-    pg = 0
-    if playgrounds.exists():
-        for p in playgrounds.iterdir():
-            if p.is_dir():
-                shutil.rmtree(p, ignore_errors=True)
-                pg += 1
+    if "containers" in components:
+        # Every botpen network (the shared `botpen` net + any per-project `_default` leftovers);
+        # only removable once the containers above are gone.
+        nets = subprocess.run(
+            ["docker", "network", "ls", "-q", "--filter", "name=botpen"], capture_output=True, text=True
+        ).stdout.split()
+        for n in nets:
+            if subprocess.run(["docker", "network", "rm", n], capture_output=True).returncode == 0:
+                removed_networks.append(n)
 
     return {
         "containers": len(removed_containers),
         "images": len(removed_images),
         "volumes": len(removed_volumes),
         "networks": len(removed_networks),
-        "playgrounds": pg,
     }
