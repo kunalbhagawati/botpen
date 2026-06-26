@@ -23,7 +23,7 @@ from ..services import hub as hub_service
 from ..services.scaffolding import docker as docker_service
 from ..services.scaffolding import scaffold as scaffold_service
 from ..services.scaffolding import templates as templates_service
-from .console import console
+from .console import box, console
 
 
 def _resolve_stack(flags: dict[str, tuple[str, ...]], interactive: bool) -> dict[str, list[str]]:
@@ -126,15 +126,19 @@ def scaffold(
     # drop the operator into a second, idle shell, so we don't attach (it would look like nothing
     # happened). Manual mode (no auto-start) attaches so the operator can drive claude themselves.
     if auto_start_bot:
-        console.print(
-            f"  [green]running[/green] [bold]{container}[/bold] - bot started itself; watch with `docker exec -it {container} bash`"
-        )
+        next_step = f"bot started itself - watch: docker exec -it {container} bash"
     elif no_attach:
-        console.print(
-            f"  [green]running[/green] [bold]{container}[/bold] - attach with `docker exec -it {container} bash`"
-        )
+        next_step = f"attach: docker exec -it {container} bash"
     else:
-        console.print(
-            f"  [green]running[/green] [bold]{container}[/bold] - register inside with `coordinate register <session-id>`"
-        )
+        next_step = "register inside: coordinate register <session-id>"
+    box(
+        f"[green]running[/green] [bold]{container}[/bold]\n"
+        f"scaffold: [dim]{sc['scaffold_id']}[/dim]\n"
+        f"stack: {stack}\n"
+        f"uid/gid: {sc['uid']}   disk: {max_disk}MB   model: {data['bot_model'] or 'default'}\n"
+        f"{next_step}",
+        title=f"scaffold {slug}",
+        style="green",
+    )
+    if not auto_start_bot and not no_attach:
         docker_service.attach(container)

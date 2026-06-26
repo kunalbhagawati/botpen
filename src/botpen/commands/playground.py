@@ -16,7 +16,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from ..stack_catalog import SCAFFOLD_STACK_CATALOG
-from .console import console
+from .console import box, console
 from .scaffold import scaffold
 from ..core.db import setup_db
 from config import settings
@@ -203,7 +203,7 @@ def setup() -> None:
     """Create the DB (host ./.db/messages.db) and apply migrations (alembic upgrade head). Idempotent."""
 
     setup_db()
-    console.print("[green]DB ready[/green] - schema at head")
+    box("[green]DB ready[/green] - schema at head", title="playground setup", style="green")
 
 
 @playground.command()
@@ -257,7 +257,8 @@ def clean(
         for p in db.parent.glob(db.name + "*"):  # messages.db + journal sidecars
             p.unlink(missing_ok=True)
         result["db"] = str(settings.DB_PATH)
-    console.print(result)
+    summary = "\n".join(f"[bold]{k}[/bold]: {v}" for k, v in result.items()) or "[dim]nothing to remove[/dim]"
+    box(summary, title="playground clean", style="yellow")
 
 
 @playground.command()
