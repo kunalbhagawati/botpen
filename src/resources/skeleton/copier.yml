@@ -15,10 +15,6 @@ scaffold_id:
   type: str
   help: "Scaffold run identifier"
 
-secret_key:
-  type: str
-  help: "Secret token for the coordinate daemon (COORDINATE__TOKEN)"
-
 uid:
   type: int
   help: "UID for the agent user inside the container"
@@ -81,3 +77,8 @@ auto_start_bot:
   type: bool
   help: "start claude automatically on spin-up (otherwise the operator runs it)"
   default: false
+
+bot_model:
+  type: str
+  help: "model for the auto-started bot (claude --model); empty = claude default"
+  default: ""

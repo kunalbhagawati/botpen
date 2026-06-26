@@ -47,12 +47,17 @@ SCAFFOLD_STACK_SCHEMA: dict = {
 # may carry arbitrary keys of any JSON type.
 SCAFFOLD_STACK_EXAMPLE: dict = {
     "languages": [
-        {"name": "python", "version": "3.14", "manager": "uv",
-         "frameworks": ["fastapi", "sqlmodel"], "test_runner": "pytest", "typed": True},
+        {
+            "name": "python",
+            "version": "3.14",
+            "manager": "uv",
+            "frameworks": ["fastapi", "sqlmodel"],
+            "test_runner": "pytest",
+            "typed": True,
+        },
     ],
     "databases": [
-        {"name": "redis", "version": "7", "purpose": "cache", "port": 6379,
-         "config": {"maxmemory": "256mb"}},
+        {"name": "redis", "version": "7", "purpose": "cache", "port": 6379, "config": {"maxmemory": "256mb"}},
     ],
     "tools": ["ffmpeg"],
     "notes": "small async API backed by a redis cache",

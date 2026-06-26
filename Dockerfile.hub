@@ -1,0 +1,26 @@
+# botpen Hub - the control plane. Runs `serve` (the single DB writer + agent endpoint), and is
+# where the DB-touching CLI commands (scaffold / db / permissions) execute, since the DB lives on a
+# volume inside the VM that the macOS host cannot reach. It spawns agent containers through the
+# mounted docker socket, so it carries the docker CLI + compose plugin.
+#
+# Alpine base: small attack surface (few CVEs), and the docker CLI + compose plugin ship as native
+# musl apk packages - no glibc static-binary workaround.
+FROM python:3.14-alpine
+
+RUN apk add --no-cache docker-cli docker-cli-compose acl ca-certificates
+
+COPY --from=ghcr.io/astral-sh/uv:0.8.4 /uv /usr/local/bin/uv
+
+WORKDIR /app
+COPY pyproject.toml uv.lock README.md config.py manage.py alembic.ini ./
+COPY src ./src
+COPY migrations ./migrations
+RUN uv sync --frozen --no-dev
+
+# Marks "we are inside the Hub container" so manage.py runs the click command directly instead of
+# re-dispatching into the Hub (see the host shim).
+ENV BOTPEN_IN_HUB=1
+# Invoke the venv python directly (not `uv run`) - no per-command pyproject re-parse, and it avoids
+# uv's settings-discovery noise.
+ENTRYPOINT ["/app/.venv/bin/python", "manage.py"]
+CMD ["serve"]

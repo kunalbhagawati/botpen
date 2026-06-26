@@ -48,8 +48,8 @@ Per-agent Docker isolation, the Hub daemon, and the `coordinate` binary.
   npm packages are gated to a 7-day minimum release age (`/etc/npmrc`) and uv is configured with
   `UV_EXCLUDE_NEWER=7 days`, mirroring the host repo's `[tool.uv] exclude-newer` in
   `pyproject.toml`. Cargo, bundler, and gradle are left to the agent.
-- **Stack data split out of `config.py`**: `src/bots/stack_catalog.py` holds the apk-install
-  catalog (category -> installable choices); `src/bots/stack_schema.py` holds the suggested
+- **Stack data split out of `config.py`**: `src/botpen/stack_catalog.py` holds the apk-install
+  catalog (category -> installable choices); `src/botpen/stack_schema.py` holds the suggested
   chosen-stack JSON Schema and a worked example returned by `stack_schema` RPC. `config.py` is
   now the `Settings` class only.
 - **`request_log` service**: records every Hub RPC call (method, scaffold_id, payload, status,
@@ -65,6 +65,7 @@ Per-agent Docker isolation, the Hub daemon, and the `coordinate` binary.
 - **Repo-root `.claude/skills/`**: `start`, `messages`, `permissions`, and `bootstrap-agent`
   skill dirs removed from the repo root; superseded by the templated container skills under
   `src/resources/skeleton/.claude/skills/`.
+- **Package `bots` → `botpen`.**
 
 ### Removed
 

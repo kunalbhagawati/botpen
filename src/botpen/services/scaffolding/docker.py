@@ -1,8 +1,8 @@
-"""Docker provisioning for scaffolded agents: shared volume, build+run, attach, and host-applied
-ACLs on the shared volume.
+"""Docker provisioning for scaffolded agents: shared volume, build+run, attach, and ACLs.
 
-Named volumes live inside the Docker VM, so ACLs are applied by a short-lived helper container
-that mounts the shared volume - the host never touches the volume's filesystem directly.
+This module runs INSIDE the Hub container, which mounts the shared volume at /shared and carries the
+acl tools - so volume/ACL maintenance runs directly (no throwaway helper container). Agent
+containers are built and run through the mounted docker socket (docker-out-of-docker).
 """
 
 from __future__ import annotations
@@ -45,16 +45,9 @@ def attach(container_name: str) -> None:
 
 
 def _helper(script: str) -> None:
-    """Run `script` in a throwaway container with the shared volume mounted at /shared."""
-    subprocess.run(
-        [
-            "docker", "run", "--rm",
-            "-v", f"{settings.SHARED_VOLUME_NAME}:/shared",
-            settings.ACL_HELPER_IMAGE, "sh", "-c",
-            f"apk add --no-cache acl >/dev/null 2>&1 && {script}",
-        ],
-        check=True, capture_output=True, text=True,
-    )
+    """Run a shared-volume maintenance command directly. The Hub container mounts the shared volume
+    at /shared and ships the acl tools, so no throwaway helper container is needed."""
+    subprocess.run(["sh", "-c", script], check=True, capture_output=True, text=True)
 
 
 def _walk(node: dict, owner_scaffold_id: str, peer_uid: int, base: str = "") -> list[str]:
@@ -98,7 +91,8 @@ def reap_stopped(after_mins: int) -> list[str]:
     Returns the reaped slugs. Best-effort: a docker/parse error on one agent skips it, not the rest."""
     listed = subprocess.run(
         ["docker", "ps", "-a", "--filter", "status=exited", "--filter", "name=botpen-", "--format", "{{.Names}}"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     ).stdout.split()
     cutoff = arrow.utcnow().shift(minutes=-after_mins)
     playgrounds = settings.WORKING_DIR / "playgrounds"
@@ -106,7 +100,9 @@ def reap_stopped(after_mins: int) -> list[str]:
     for name in listed:
         slug = name.removeprefix("botpen-")
         finished = subprocess.run(
-            ["docker", "inspect", "-f", "{{.State.FinishedAt}}", name], capture_output=True, text=True,
+            ["docker", "inspect", "-f", "{{.State.FinishedAt}}", name],
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         try:
             if arrow.get(finished) > cutoff:  # stopped too recently - leave it
@@ -129,56 +125,66 @@ def reap_stopped(after_mins: int) -> list[str]:
     return reaped
 
 
-def teardown(components: list[str], stopped_only: bool = False) -> dict:
-    """Clean up playground folders and the selected Docker components.
+def teardown(components: list[str]) -> dict:
+    """Remove the selected Docker artifacts for botpen. `components` is a subset of
+    {``containers``, ``images``, ``volumes``}:
+    - ``containers``: ``docker rm -f`` every ``botpen-`` container.
+    - ``images``: ``docker rmi -f`` every ``botpen-*`` image (agents + the Hub).
+    - ``volumes``: remove every ``botpen`` volume (shared + any stale per-agent workspace volumes).
 
-    Always removes all playground folders.  Then, for each entry in `components`
-    (values: ``containers``, ``images``, ``volumes``):
-    - ``containers``: list ``botpen-`` containers (exited-only when ``stopped_only``),
-      then ``docker rm -f`` each.
-    - ``images``: ``docker rmi -f`` every ``botpen-agent*`` image.
-    - ``volumes``: ``docker volume rm -f`` the shared volume.
-
-    Returns a summary dict with removal counts.
+    Also removes every ``botpen`` network when containers are torn down. Playground folders and the
+    DB are handled by the caller (the `clean` command). Returns removal counts.
     """
-    ps_cmd = ["docker", "ps", "-a", "--filter", "name=botpen-", "--format", "{{.Names}}"]
-    if stopped_only:
-        ps_cmd += ["--filter", "status=exited"]
-
     removed_containers: list[str] = []
     removed_images: list[str] = []
-    removed_volume: str | None = None
+    removed_volumes: list[str] = []
+    removed_networks: list[str] = []
 
     if "containers" in components:
-        names = subprocess.run(ps_cmd, capture_output=True, text=True).stdout.split()
+        names = subprocess.run(
+            ["docker", "ps", "-a", "--filter", "name=botpen-", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+        ).stdout.split()
         for name in names:
             subprocess.run(["docker", "rm", "-f", name], capture_output=True)
         removed_containers = names
 
     if "images" in components:
-        imgs = set(subprocess.run(
-            ["docker", "images", "--filter", "reference=botpen-agent*", "--format", "{{.Repository}}:{{.Tag}}"],
-            capture_output=True, text=True,
-        ).stdout.split())
+        # botpen-* catches the agent images (botpen-agent-<slug>) and the Hub image (botpen-hub).
+        imgs = set(
+            subprocess.run(
+                ["docker", "images", "--filter", "reference=botpen-*", "--format", "{{.Repository}}:{{.Tag}}"],
+                capture_output=True,
+                text=True,
+            ).stdout.split()
+        )
         for image in imgs:
             subprocess.run(["docker", "rmi", "-f", image], capture_output=True)
         removed_images = list(imgs)
 
     if "volumes" in components:
-        subprocess.run(["docker", "volume", "rm", "-f", settings.SHARED_VOLUME_NAME], capture_output=True)
-        removed_volume = settings.SHARED_VOLUME_NAME
+        # Every botpen volume - the shared volume + any stale per-agent workspace volumes.
+        vols = subprocess.run(
+            ["docker", "volume", "ls", "-q", "--filter", "name=botpen"], capture_output=True, text=True
+        ).stdout.split()
+        for v in vols:
+            subprocess.run(["docker", "volume", "rm", "-f", v], capture_output=True)
+            removed_volumes.append(v)
 
-    playgrounds = settings.WORKING_DIR / "playgrounds"
-    pg = 0
-    if playgrounds.exists():
-        for p in playgrounds.iterdir():
-            if p.is_dir():
-                shutil.rmtree(p, ignore_errors=True)
-                pg += 1
+    if "containers" in components:
+        # Every botpen network (the shared `botpen` net + any per-project `_default` leftovers);
+        # only removable once the containers above are gone.
+        nets = subprocess.run(
+            ["docker", "network", "ls", "-q", "--filter", "name=botpen"], capture_output=True, text=True
+        ).stdout.split()
+        for n in nets:
+            if subprocess.run(["docker", "network", "rm", n], capture_output=True).returncode == 0:
+                removed_networks.append(n)
 
     return {
         "containers": len(removed_containers),
         "images": len(removed_images),
-        "volume": removed_volume,
-        "playgrounds": pg,
+        "volumes": len(removed_volumes),
+        "networks": len(removed_networks),
     }

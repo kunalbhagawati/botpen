@@ -48,5 +48,5 @@ def coerce_body(text: str) -> str:
     it): if `text` already parses as JSON, keep that value; otherwise treat it as a plain string."""
     try:
         return json.dumps(json.loads(text))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return json.dumps(text)

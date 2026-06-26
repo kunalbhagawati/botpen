@@ -1,0 +1,12 @@
+.venv
+.db
+playgrounds
+.git
+.hub.log
+**/__pycache__
+**/*.pyc
+.ruff_cache
+.pyrefly_cache
+.env.local
+scratchpad
+docs/.plans

@@ -1,7 +1,7 @@
 """SQLModel engine, session, and schema lifecycle for the mailbox.
 
 The schema is owned by Alembic migrations (`migrations/`), generated from the SQLModel models
-in :mod:`bots.core.models`. `setup_db()` (exposed as `db setup`) applies them; callers never
+in :mod:`botpen.core.models`. `setup_db()` (exposed as `db setup`) applies them; callers never
 touch Alembic directly. SQLite serializes writes itself (WAL + busy_timeout), so callers never
 manage a lock. The code is deliberately SQLite-specific - swap the engine/pragmas here when the
 backend changes.
@@ -13,7 +13,7 @@ from functools import wraps
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import event
+from sqlalchemy import event, inspect
 from sqlmodel import Session as DBSession
 from sqlmodel import SQLModel, create_engine
 
@@ -82,10 +82,6 @@ def atomic(fn):
     def wrapped(s, *args, **kwargs):
         result = fn(s, *args, **kwargs)
         s.commit()
-        # Fold the WAL into messages.db right after the write, so a plain sqlite viewer opening the
-        # file sees it immediately instead of waiting for the ~1000-page (~4MB) auto-checkpoint that
-        # this low-traffic daemon rarely reaches. PASSIVE never blocks readers/writers and is cheap.
-        s.connection().exec_driver_sql("PRAGMA wal_checkpoint(PASSIVE)")
         return result
 
     return wrapped
@@ -98,20 +94,29 @@ def _alembic_config() -> Config:
 
 
 def _setup() -> None:
-    """One-time, persistent engine setup, run before migrations on `db setup`: switch the SQLite
-    file to WAL. WAL persists in the file header, so it is set once here rather than per
-    connection. (Can't live in a migration - SQLite refuses a journal_mode change inside a
-    transaction, and Alembic runs each migration in one.)"""
+    """One-time, persistent engine setup, run before migrations on `db setup`: set the SQLite
+    journal mode to DELETE (the classic rollback journal). NOT WAL: the DB file is bind-mounted to
+    the host so file-based explorers (DBCode / DataGrip) can open it, and WAL's mmap'd `-shm` does
+    not work over the Docker Desktop virtiofs bind, whereas the rollback journal does. (Can't live
+    in a migration - SQLite refuses a journal_mode change inside Alembic's per-migration txn.)"""
     with _engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+        conn.exec_driver_sql("PRAGMA journal_mode=DELETE")
 
 
 def setup_db() -> None:
-    """Create the database (if absent), run one-time engine setup (WAL), then apply migrations.
-    Idempotent."""
+    """Create the database (if absent), run one-time engine setup (journal mode), then apply
+    migrations. Idempotent."""
     settings.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     _setup()
     command.upgrade(_alembic_config(), "head")
+
+
+def ensure_db() -> None:
+    """Create + migrate the DB if the schema is absent (e.g. after `teardown --db`), so commands
+    that need it (scaffold, serve) self-heal instead of crashing on a missing table. Cheap no-op
+    when the schema is already present."""
+    if not settings.DB_PATH.exists() or not inspect(_engine).has_table("scaffolds"):
+        setup_db()
 
 
 def reset_db() -> None:

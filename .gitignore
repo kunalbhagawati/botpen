@@ -631,3 +631,5 @@ docs/.context
 
 # The copier skeleton (src/resources/skeleton/) is tracked source; its .env.jinja template is
 # re-included by src/resources/skeleton/.gitignore despite the `.env.*` rule above.
+
+.idea/

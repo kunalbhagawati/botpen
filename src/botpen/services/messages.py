@@ -147,7 +147,5 @@ def read_thoughts(s, owner_session_id: str, caller_session_id: str) -> list[dict
         if caller_session_id not in readers:
             return []
     # pyrefly: ignore [bad-argument-type]
-    rows = s.exec(
-        select(Thought).where(Thought.session_id == owner_session_id).order_by(Thought.id)
-    ).all()
+    rows = s.exec(select(Thought).where(Thought.session_id == owner_session_id).order_by(Thought.id)).all()
     return [_thought_to_dict(t) for t in rows]

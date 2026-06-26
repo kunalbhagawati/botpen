@@ -17,5 +17,5 @@ def normalize_session(session_id: str) -> str:
     try:
         # pyrefly: ignore [unnecessary-type-conversion]
         return uuid.UUID(str(session_id)).hex
-    except (ValueError, AttributeError, TypeError):
+    except ValueError, AttributeError, TypeError:
         return session_id

@@ -49,7 +49,9 @@ def stage_build_inputs(dest: Path, secret_key: str) -> None:
     src = dest / ".coordinate-src"
     (src / "coordinate_cli").mkdir(parents=True, exist_ok=True)
     shutil.copytree(
-        _COORDINATE_SRC, src / "coordinate_cli", dirs_exist_ok=True,
+        _COORDINATE_SRC,
+        src / "coordinate_cli",
+        dirs_exist_ok=True,
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
     (src / "coordinate_cli" / "_identity.py").write_text(f'TOKEN = "{secret_key}"\n')

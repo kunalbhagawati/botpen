@@ -12,33 +12,17 @@ import sys
 import time
 
 import click
-import questionary
 
 # pyrefly: ignore [missing-import]
 from config import settings
 
-from ..stack_catalog import SCAFFOLD_STACK_CATALOG
+from ..core.db import ensure_db
+from ..services import hub as hub_service
 from ..services.scaffolding import docker as docker_service
 from ..services.scaffolding import scaffold as scaffold_service
 from ..services.scaffolding import templates as templates_service
-from .console import console
-
-
-def _resolve_stack(flags: dict[str, tuple[str, ...]], interactive: bool) -> dict[str, list[str]]:
-    """Resolve each catalog category to a chosen SUBSET: explicit flags, an interactive
-    multi-select, or empty (blank Alpine). Iterates the catalog, so new categories appear in the
-    form without touching this code."""
-    stack: dict[str, list[str]] = {}
-    for category, entries in SCAFFOLD_STACK_CATALOG.items():
-        keys = [e["key"] for e in entries]
-        chosen = list(flags.get(category) or ())
-        if not chosen and interactive:
-            chosen = questionary.checkbox(f"{category}?", choices=keys).ask() or []
-        for k in chosen:
-            if k not in keys:
-                raise click.BadParameter(f"{category}: '{k}' not in {keys}")
-        stack[category] = chosen
-    return stack
+from .render import box, console
+from .utils import resolve_stack
 
 
 @click.command()
@@ -60,16 +44,31 @@ def _resolve_stack(flags: dict[str, tuple[str, ...]], interactive: bool) -> dict
     is_flag=True,
     help="start claude in the container automatically on spin-up (otherwise the operator runs it)",
 )
+@click.option(
+    "--model",
+    type=click.Choice(["opus", "sonnet", "haiku", "default"]),
+    default=settings.SCAFFOLD_DEFAULT_MODEL,
+    show_default=True,
+    help="default claude model in the container (written to ~/.claude/settings.json; applies to both the auto-started bot and an attached operator). Default from SCAFFOLD_DEFAULT_MODEL in .env",
+)
+@click.option(
+    "--no-serve", "no_serve", is_flag=True, help="do not auto-start the Hub daemon (assume it is already running)"
+)
 @click.option("--yes", is_flag=True, help="non-interactive: install nothing extra for unset categories")
-def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed, auto_start_bot, yes) -> None:
+def scaffold(
+    slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed, auto_start_bot, model, no_serve, yes
+) -> None:
     """Scaffold a new isolated agent playground."""
     slug = slug or f"agent-{secrets.token_hex(3)}"
     max_disk = max_disk or settings.SCAFFOLD_DEFAULT_MAX_DISK_MB
     flags = {"language": languages, "db": dbs, "tools": tools}
     any_flag = any(flags.values())
     interactive = not yes and not any_flag and sys.stdin.isatty()
-    stack = _resolve_stack(flags, interactive)
+    stack = resolve_stack(flags, interactive)
 
+    ensure_db()  # self-heal the schema if it was wiped (e.g. teardown --db)
+    if not no_serve and hub_service.ensure_hub():  # an auto-started bot needs the Hub reachable
+        console.print("  [green]Hub started[/green] in the background (logs: .hub.log)")
     sc = scaffold_service.create_scaffold(slug, max_disk, stack)
     # Durable, scaffold-level folder: epoch.scaffold_id.slug (session_id is per-incarnation and
     # unknown at scaffold time, so it is not part of the folder name).
@@ -77,7 +76,6 @@ def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed,
     data = {
         "slug": slug,
         "scaffold_id": sc["scaffold_id"],
-        "secret_key": sc["secret_key"],
         "uid": sc["uid"],
         "gid": sc["gid"],
         "max_disk_mb": max_disk,
@@ -85,17 +83,20 @@ def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed,
         "installed": ", ".join(k for keys in stack.values() for k in keys) or "nothing extra (a blank Alpine base)",
         "oauth_token": settings.CLAUDE_CODE_OAUTH_TOKEN,
         "base_image": settings.SCAFFOLD_BASE_IMAGE,
-        "daemon_host": "host.docker.internal",
+        "daemon_host": "hub",  # the agent reaches the Hub by name on the shared botpen network
         "daemon_thrift_port": settings.DAEMON_PORT,
         "daemon_ws_port": settings.DAEMON_WS_PORT,
         "shared_volume": settings.SHARED_VOLUME_NAME,
         "agent_user": "agent",
         "bot_auto_proceed": bot_auto_proceed,
         "auto_start_bot": auto_start_bot,
+        "bot_model": model or settings.SCAFFOLD_DEFAULT_MODEL,
     }
     templates_service.render(dest, data)
     templates_service.stage_build_inputs(dest, sc["secret_key"])
-    console.print(f"[green]scaffolded[/green] [bold]{slug}[/bold]  stack={stack}  uid/gid={sc['uid']}  disk={max_disk}MB")
+    console.print(
+        f"[green]scaffolded[/green] [bold]{slug}[/bold]  stack={stack}  uid/gid={sc['uid']}  disk={max_disk}MB"
+    )
 
     container = f"botpen-{slug}"
     console.print("  building image + starting container (first build pulls + compiles, give it a minute) ...")
@@ -103,8 +104,23 @@ def scaffold(slug, max_disk, languages, dbs, tools, no_attach, bot_auto_proceed,
     docker_service.ensure_agent_dir(sc["scaffold_id"], sc["uid"], sc["gid"])
     docker_service.build_and_up(dest)
     scaffold_service.set_status(sc["scaffold_id"], "running", container_name=container)
-    console.print(f"  [green]running[/green] [bold]{container}[/bold] - register inside with `coordinate register <session-id>`")
-    if no_attach:
-        console.print(f"  attach with: docker exec -it {container} bash")
+    # An auto-started bot runs claude itself as the container's main process - attaching would just
+    # drop the operator into a second, idle shell, so we don't attach (it would look like nothing
+    # happened). Manual mode (no auto-start) attaches so the operator can drive claude themselves.
+    if auto_start_bot:
+        next_step = f"bot started itself - watch: docker exec -it {container} bash"
+    elif no_attach:
+        next_step = f"attach: docker exec -it {container} bash"
     else:
+        next_step = "register inside: coordinate register <session-id>"
+    box(
+        f"[green]running[/green] [bold]{container}[/bold]\n"
+        f"scaffold: [dim]{sc['scaffold_id']}[/dim]\n"
+        f"stack: {stack}\n"
+        f"uid/gid: {sc['uid']}   disk: {max_disk}MB   model: {data['bot_model'] or 'default'}\n"
+        f"{next_step}",
+        title=f"scaffold {slug}",
+        style="green",
+    )
+    if not auto_start_bot and not no_attach:
         docker_service.attach(container)

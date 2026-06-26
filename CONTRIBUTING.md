@@ -1,6 +1,6 @@
 # Contributing
 
-Guide for working on **botpen itself** - the `bots` package, CLI, schema, migrations, and the
+Guide for working on **botpen itself** - the `botpen` package, CLI, schema, migrations, and the
 `coordinate` binary. Not for the playground agents (their rules live in the skills rendered into
 each container by the copier template) or for operators (see [`README.md`](README.md)).
 
@@ -24,15 +24,15 @@ The short list (full version in [ARCHITECTURE.md § Where things go](ARCHITECTUR
 | Change | Goes in |
 |---|---|
 | App config / constants / paths | `config.py` (`settings`) |
-| A table / schema change | `src/bots/core/models.py` + a new migration (see below) |
-| A data operation (host side) | `src/bots/services/<concern>.py` (wrap with `@with_session` or `@atomic`) |
-| Scaffold provisioning / rendering | `src/bots/services/scaffolding/{scaffold,templates,docker}.py` |
-| A host CLI command | `src/bots/commands/<group>.py`, registered on its group in `cli.py` |
+| A table / schema change | `src/botpen/core/models.py` + a new migration (see below) |
+| A data operation (host side) | `src/botpen/services/<concern>.py` (wrap with `@with_session` or `@atomic`) |
+| Scaffold provisioning / rendering | `src/botpen/services/scaffolding/{scaffold,templates,docker}.py` |
+| A host CLI command | `src/botpen/commands/<group>.py`, registered on its group in `cli.py` |
 | Agent-facing RPC command | `src/coordinate_cli/cli.py` + `src/resources/hub.thrift` |
 | In-container background daemons | `src/coordinate_cli/daemons.py` |
 | Playground template files | `src/resources/skeleton/` (Jinja + copier.yml) |
 | Agent runtime skills (live in container) | `src/resources/skeleton/.claude/skills/<skill>/SKILL.md` |
-| Shared SQLite/engine wiring | `src/bots/core/db.py` |
+| Shared SQLite/engine wiring | `src/botpen/core/db.py` |
 
 ## Schema & migrations (HARD constraint)
 
@@ -83,13 +83,13 @@ Callers pass everything **after** `s`; the decorator supplies the session (and c
 
 ## Adding a host CLI command
 
-1. Define the command in `src/bots/commands/<group>.py` as a `@click.command()`.
+1. Define the command in `src/botpen/commands/<group>.py` as a `@click.command()`.
 2. Register it on its group at the foot of the file: `<group>.add_command(<fn>)`.
 3. Call only into `services/` (never touch `core/` or open a session from a command).
 
 ## Adding a host service operation
 
-1. Add the function to `src/bots/services/<concern>.py`, decorated with `@with_session` (reads)
+1. Add the function to `src/botpen/services/<concern>.py`, decorated with `@with_session` (reads)
    or `@atomic` (writes) from `core.db`.
 2. The function signature starts with `(s, ...)` - the session is supplied by the decorator.
 3. No raw SQL and no `sqlite3` - go through SQLModel (see [CODESTYLE.md](CODESTYLE.md)).
@@ -97,7 +97,7 @@ Callers pass everything **after** `s`; the decorator supplies the session (and c
 ## Adding a Hub RPC method
 
 1. Add the method signature to `src/resources/hub.thrift` (the IDL is the contract).
-2. Implement it as an `async def` on the `Hub` class in `src/bots/commands/serve.py`.
+2. Implement it as an `async def` on the `Hub` class in `src/botpen/commands/serve.py`.
 3. Add the corresponding client command to `src/agent_cli/cli.py`.
 4. The IDL method name must match the handler method name exactly (thriftpy2 looks them up by
    name).

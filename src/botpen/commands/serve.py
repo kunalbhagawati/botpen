@@ -25,6 +25,7 @@ from thriftpy2.rpc import make_aio_server
 # pyrefly: ignore [missing-import]
 from config import settings
 
+from ..core.db import ensure_db
 from ..stack_schema import SCAFFOLD_STACK_EXAMPLE, SCAFFOLD_STACK_SCHEMA
 
 from ..services import messages as messages_service
@@ -75,12 +76,22 @@ class Hub:
             result = await work(sc)
         except Exception as e:
             await asyncio.to_thread(
-                request_log_service.record, method, scaffold_id, payload, "error", str(e),
+                request_log_service.record,
+                method,
+                scaffold_id,
+                payload,
+                "error",
+                str(e),
                 int((time.monotonic() - start) * 1000),
             )
             raise
         await asyncio.to_thread(
-            request_log_service.record, method, scaffold_id, payload, "ok", None,
+            request_log_service.record,
+            method,
+            scaffold_id,
+            payload,
+            "ok",
+            None,
             int((time.monotonic() - start) * 1000),
         )
         return json.dumps(result)
@@ -124,8 +135,12 @@ class Hub:
     async def register_session(self, token, session_id, model, description, personality) -> str:
         async def work(sc):
             await asyncio.to_thread(
-                sessions_service.register, session_id, sc["scaffold_id"],
-                model or None, description or None, personality or None,
+                sessions_service.register,
+                session_id,
+                sc["scaffold_id"],
+                model or None,
+                description or None,
+                personality or None,
             )
             return {"scaffold": sc["scaffold_id"], "session": normalize_session(session_id)}
 
@@ -138,8 +153,16 @@ class Hub:
             body_val, extra_val = _decode(body), _decode(extra)
             to = [normalize_session(r) for r in recipients] if recipients else None
             mid, ts = await asyncio.to_thread(messages_service.write_message, sid, session, body_val, extra_val, to)
-            event = {"event": "incoming", "id": mid, "scaffold": sid, "session": session,
-                     "created_at": ts, "body": body_val, "extra": extra_val, "to": to}
+            event = {
+                "event": "incoming",
+                "id": mid,
+                "scaffold": sid,
+                "session": session,
+                "created_at": ts,
+                "body": body_val,
+                "extra": extra_val,
+                "to": to,
+            }
             targets = to if to else [c["scaffold"] for c in self._conns if c["scaffold"] != sid]
             for t in set(targets):
                 await self._push_scaffold(t, event)
@@ -154,8 +177,15 @@ class Hub:
             extra_val = _decode(extra)
             tid, ts = await asyncio.to_thread(messages_service.write_thought, sid, session, thoughts, extra_val)
             readers = await asyncio.to_thread(sessions_service.get_thoughts_readers, sid)
-            event = {"event": "thought", "id": tid, "scaffold": sid, "session": session,
-                     "created_at": ts, "thoughts": thoughts, "extra": extra_val}
+            event = {
+                "event": "thought",
+                "id": tid,
+                "scaffold": sid,
+                "session": session,
+                "created_at": ts,
+                "thoughts": thoughts,
+                "extra": extra_val,
+            }
             for r in readers:
                 await self._push_session(r, event)
             return {"id": tid, "created_at": ts}
@@ -174,8 +204,11 @@ class Hub:
             profile = await asyncio.to_thread(sessions_service.get_profile, target_scaffold_id)
             if scaf is None and profile is None:
                 return None
-            out = {"scaffold": target_scaffold_id, "slug": scaf["slug"] if scaf else None,
-                   "description": (profile or {}).get("description")}
+            out = {
+                "scaffold": target_scaffold_id,
+                "slug": scaf["slug"] if scaf else None,
+                "description": (profile or {}).get("description"),
+            }
             allowed = set(fields or [])
             if "personality" in allowed:
                 out["personality"] = (profile or {}).get("personality")
@@ -187,7 +220,9 @@ class Hub:
 
     async def perm_ask(self, token, peer_scaffold_id, reason) -> str:
         async def work(sc):
-            row = await asyncio.to_thread(permissions_service.log_ask, sc["scaffold_id"], peer_scaffold_id, reason or None)
+            row = await asyncio.to_thread(
+                permissions_service.log_ask, sc["scaffold_id"], peer_scaffold_id, reason or None
+            )
             await self._push_scaffold(peer_scaffold_id, {"event": "permission", **row})
             return row
 
@@ -250,7 +285,7 @@ class Hub:
         async def work(sc):
             try:
                 parsed = json.loads(stack_json) if stack_json else None
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 parsed = stack_json  # no validation - record whatever they sent, even raw text
             await asyncio.to_thread(sessions_service.set_chosen_stack, sc["scaffold_id"], parsed)
             return {"ok": True}
@@ -260,8 +295,12 @@ class Hub:
     async def thoughts_ask(self, token, owner_session_id, why) -> str:
         async def work(sc):
             asker = await self._active_or_raise(sc["scaffold_id"])
-            event = {"event": "thoughts-request", "from_session": asker,
-                     "from_scaffold": sc["scaffold_id"], "why": why or None}
+            event = {
+                "event": "thoughts-request",
+                "from_session": asker,
+                "from_scaffold": sc["scaffold_id"],
+                "why": why or None,
+            }
             await self._push_session(owner_session_id, event)
             return {"ok": True, "asked": normalize_session(owner_session_id)}
 
@@ -315,23 +354,22 @@ class Hub:
 @click.command()
 def serve() -> None:
     """Run the Hub daemon (Thrift RPC + WebSocket push). Foreground, Ctrl-C to stop."""
+    ensure_db()  # self-heal the schema if it was wiped (e.g. teardown --db)
     hub = Hub()
     idl = thriftpy2.load(str(_IDL_PATH), module_name="hub_thrift")
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    # Thrift binds via run_until_complete internally (needs the loop idle); websockets.serve needs
-    # the loop running - so bind Thrift now, start websockets as a task once run_forever begins.
+    # Thrift binds via run_until_complete internally (needs the loop idle), so bind it first; the
+    # WebSocket server is then bound eagerly below (also before run_forever).
     thrift_server = make_aio_server(idl.Hub, hub, settings.DAEMON_HOST, settings.DAEMON_PORT, loop=loop)
     thrift_server.init_server()
 
     ws_holder: dict = {}
 
     async def _start_ws() -> None:
-        ws_holder["server"] = await websockets.serve(
-            hub.ws_handler, settings.DAEMON_HOST, settings.DAEMON_WS_PORT
-        )
+        ws_holder["server"] = await websockets.serve(hub.ws_handler, settings.DAEMON_HOST, settings.DAEMON_WS_PORT)
 
     async def _reaper() -> None:
         """Teardown monitor: every minute, reap the container/image/volume/playground of any agent
@@ -345,14 +383,21 @@ def serve() -> None:
             except Exception as e:
                 click.echo(json.dumps({"event": "reaper-error", "error": str(e)}))
 
-    loop.create_task(_start_ws())
+    # Bind the WebSocket server eagerly (not as a fire-and-forget task) so a bind failure - e.g.
+    # the WS port already in use by another Hub - raises here and aborts serve, instead of being a
+    # swallowed task exception that leaves the daemon half-running on Thrift only.
+    loop.run_until_complete(_start_ws())
     loop.create_task(_reaper())
 
-    click.echo(json.dumps({
-        "event": "serving",
-        "thrift": f"{settings.DAEMON_HOST}:{settings.DAEMON_PORT}",
-        "ws": f"{settings.DAEMON_HOST}:{settings.DAEMON_WS_PORT}",
-    }))
+    click.echo(
+        json.dumps(
+            {
+                "event": "serving",
+                "thrift": f"{settings.DAEMON_HOST}:{settings.DAEMON_PORT}",
+                "ws": f"{settings.DAEMON_HOST}:{settings.DAEMON_WS_PORT}",
+            }
+        )
+    )
     try:
         loop.run_forever()
     except KeyboardInterrupt:

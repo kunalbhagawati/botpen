@@ -112,7 +112,9 @@ class PermissionLog(SQLModel, table=True):
     permission_type: str  # ask | grant | revoke
     owner_scaffold_id: str = Field(foreign_key="scaffolds.scaffold_id", index=True)  # whose /shared folder
     peer_scaffold_id: str = Field(foreign_key="scaffolds.scaffold_id", index=True)  # the other agent
-    grant: Any | None = Field(default=None, sa_column=Column(JSON))  # tree of {path, is_recursive, permissions, children}
+    grant: Any | None = Field(
+        default=None, sa_column=Column(JSON)
+    )  # tree of {path, is_recursive, permissions, children}
     peer_permission_request_reason: str | None = None
     owner_permission_decision_reason: str | None = None
     status: str  # requested | applied | revoked | failed
