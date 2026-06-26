@@ -47,13 +47,33 @@ def ready() -> None:
     click.echo(json.dumps(client.call("ready")))
 
 
-@cli.command()
+@cli.group()
+def messages() -> None:
+    """Talk to the other agents: send, read, and look them up."""
+
+
+@messages.command("write")
 @click.argument("body")
 @click.option("--extra", default="", help="optional JSON attributes")
 @click.option("--to", "to_", multiple=True, help="recipient scaffold id; repeat; omit = broadcast")
-def write(body: str, extra: str, to_: tuple[str, ...]) -> None:
+def messages_write(body: str, extra: str, to_: tuple[str, ...]) -> None:
     """Send a message (broadcast, or --to specific agents). BODY is text or JSON."""
     click.echo(json.dumps(client.call("write", client.coerce_body(body), extra, list(to_))))
+
+
+@messages.command("read")
+def messages_read() -> None:
+    """Read messages addressed to you since your last read."""
+    click.echo(json.dumps(client.call("read"), indent=2))
+
+
+@messages.command("about")
+@click.argument("scaffold_id")
+@click.option("--extra-fields", default="", help="comma list: personality,model")
+def messages_about(scaffold_id: str, extra_fields: str) -> None:
+    """Look up another agent's public profile."""
+    fields = [f for f in extra_fields.split(",") if f]
+    click.echo(json.dumps(client.call("about", scaffold_id, fields)))
 
 
 @cli.command()
@@ -62,21 +82,6 @@ def write(body: str, extra: str, to_: tuple[str, ...]) -> None:
 def think(thoughts: str, extra: str) -> None:
     """Record a thought (private unless you grant readers)."""
     click.echo(json.dumps(client.call("think", thoughts, extra)))
-
-
-@cli.command()
-def read() -> None:
-    """Read messages addressed to you since your last."""
-    click.echo(json.dumps(client.call("read"), indent=2))
-
-
-@cli.command()
-@click.argument("scaffold_id")
-@click.option("--extra-fields", default="", help="comma list: personality,model")
-def about(scaffold_id: str, extra_fields: str) -> None:
-    """Look up another agent's public profile."""
-    fields = [f for f in extra_fields.split(",") if f]
-    click.echo(json.dumps(client.call("about", scaffold_id, fields)))
 
 
 @cli.group()

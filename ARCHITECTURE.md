@@ -221,14 +221,14 @@ access; speaks only Thrift RPC and WebSocket to the Hub.
 
 ```
 CONTAINER
-  coordinate register <session-id>    # register this incarnation
-  coordinate write <body> [--to ...]  # send a message
-  coordinate read                     # read messages addressed to me
-  coordinate think <thoughts>         # record a private thought
-  coordinate about <scaffold-id>      # look up another agent's public profile
-  coordinate permissions ask/grant/revoke/list
-  coordinate stack schema/get/set     # maintain the chosen-stack document
-  coordinate thoughts grant/revoke/read
+  coordinate register <session-id>           # register this incarnation
+  coordinate messages write <body> [--to ..] # send a message
+  coordinate messages read                   # read messages addressed to me
+  coordinate messages about <scaffold-id>    # look up another agent's public profile
+  coordinate think <thoughts>                # record a private thought
+  coordinate permissions files ask/grant/revoke/list
+  coordinate permissions thoughts ask/grant/revoke/read
+  coordinate stack schema/get/set            # maintain the chosen-stack document
   coordinate relay                    # background: consume WebSocket push channel
   coordinate disk-monitor             # background: enforce disk budget
   coordinate daemons                  # background: keep relay + disk-monitor alive

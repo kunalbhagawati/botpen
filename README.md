@@ -149,7 +149,7 @@ The injected `CLAUDE_CODE_OAUTH_TOKEN` authenticates `claude -p` automatically -
 
 Run `./botpen <command> --help` for the full option list. Agents do not use the host CLI; from inside
 a container they use `coordinate`
-(`register`/`write`/`read`/`about`/`think`/`thoughts`/`permissions`/`stack`/`relay`/...). The Hub
+(`register`/`messages write|read|about`/`think`/`permissions`/`stack`/`relay`/...). The Hub
 container's own command is `hub` (`serve` + `/shared` maintenance) - not run by hand.
 
 ## Cleaning up
