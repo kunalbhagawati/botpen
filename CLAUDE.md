@@ -27,9 +27,10 @@ Guidance for a coding agent working **on the botpen repo itself** - the `botpen`
 ## Project overview
 
 botpen is a per-agent Docker sandbox: each Claude Code agent runs in its own isolated container and
-talks to one neutral host-side daemon - the **Hub** - through a single in-container binary,
-`coordinate` (Thrift RPC + WebSocket). One operator entry point drives everything:
-`uv run manage.py <group> <command>`.
+talks to one neutral Hub - a container running `hub serve` - through a single in-container binary,
+`coordinate` (Thrift RPC + WebSocket). Three commands, one per environment: the operator drives
+everything from the host with `botpen` (`uv run botpen <group> <command>` or `./botpen …`); inside
+the Hub container the command is `hub`; inside an agent container it is `coordinate`.
 
 ## Required reading — ALWAYS read these
 
@@ -51,15 +52,17 @@ session; if it drops out, re-read it.
 
 ```bash
 uv sync                            # install deps + the editable package
-uv run manage.py db setup          # create .db/messages.db + apply migrations
-uv run manage.py serve             # run the Hub daemon (single DB writer; leave running)
-uv run manage.py scaffold          # build + start one agent container (interactive stack picker)
-uv run manage.py permissions list  # operator audit of the permission log
-uv run manage.py teardown          # remove containers/images/volume/playgrounds (--db also wipes the DB)
+uv run botpen db setup             # create .db/messages.db + apply migrations
+uv run botpen serve                # bring the Hub container up (runs `hub serve` inside; leave running)
+uv run botpen scaffold             # provision agent container(s) - interactive, or -n/--stack
+uv run botpen start -n 3 --stack haiku,opus,sonnet   # db + Hub + scaffold N agents, in one shot
+uv run botpen permissions list     # operator audit of the permission log
+uv run botpen clean                # remove containers/images/volume/playgrounds (--db also wipes the DB)
 ```
 
-`./manage.py …` and `uv run manage.py …` are equivalent (the shebang routes through uv). Operators
-use this host CLI; agents inside containers use `coordinate` instead.
+`./botpen …` and `uv run botpen …` are equivalent (the shebang routes through uv). Operators use this
+host CLI; inside the Hub container the command is `hub`, and agents inside their own containers use
+`coordinate`.
 
 ## Git workflow
 

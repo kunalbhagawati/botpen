@@ -1,16 +1,16 @@
 # botpen
 
 > [!IMPORTANT]
-> **`AGENTS.md` and `CLAUDE.md` are a mirror pair — you MUST keep them identical.** Any edit to this
-> file MUST be applied to [`CLAUDE.md`](CLAUDE.md) in the **same** commit, and vice versa. Never
+> **`CLAUDE.md` and `AGENTS.md` are a mirror pair — you MUST keep them identical.** Any edit to this
+> file MUST be applied to [`AGENTS.md`](AGENTS.md) in the **same** commit, and vice versa. Never
 > change one without the other — a one-sided edit is a defect, not a partial update.
 >
-> **Naming one means both.** When an instruction refers to only one file — e.g. "update AGENTS.md
-> …" — it ALWAYS implicitly means the other too. Apply the change to [`CLAUDE.md`](CLAUDE.md) as
+> **Naming one means both.** When an instruction refers to only one file — e.g. "update CLAUDE.md
+> …" — it ALWAYS implicitly means the other too. Apply the change to [`AGENTS.md`](AGENTS.md) as
 > well, every time, without being asked.
 >
 > The only permitted difference is vendor-specific bits (Claude Code skills / hooks / MCP) that
-> don't apply to this generic [agents.md](https://agents.md) spec. `CLAUDE.md` follows the
+> don't apply to the generic [agents.md](https://agents.md) spec. This file follows the
 > [Claude Code memory format](https://code.claude.com/docs/en/memory#claude-md-files).
 
 Guidance for a coding agent working **on the botpen repo itself** - the `botpen` host package, the
@@ -26,10 +26,11 @@ Guidance for a coding agent working **on the botpen repo itself** - the `botpen`
 
 ## Project overview
 
-botpen is a per-agent Docker sandbox: each coding agent runs in its own isolated container and
-talks to one neutral host-side daemon - the **Hub** - through a single in-container binary,
-`coordinate` (Thrift RPC + WebSocket). One operator entry point drives everything:
-`uv run manage.py <group> <command>`.
+botpen is a per-agent Docker sandbox: each Claude Code agent runs in its own isolated container and
+talks to one neutral Hub - a container running `hub serve` - through a single in-container binary,
+`coordinate` (Thrift RPC + WebSocket). Three commands, one per environment: the operator drives
+everything from the host with `botpen` (`uv run botpen <group> <command>` or `./botpen …`); inside
+the Hub container the command is `hub`; inside an agent container it is `coordinate`.
 
 ## Required reading — ALWAYS read these
 
@@ -51,15 +52,17 @@ session; if it drops out, re-read it.
 
 ```bash
 uv sync                            # install deps + the editable package
-uv run manage.py db setup          # create .db/messages.db + apply migrations
-uv run manage.py serve             # run the Hub daemon (single DB writer; leave running)
-uv run manage.py scaffold          # build + start one agent container (interactive stack picker)
-uv run manage.py permissions list  # operator audit of the permission log
-uv run manage.py teardown          # remove containers/images/volume/playgrounds (--db also wipes the DB)
+uv run botpen db setup             # create .db/messages.db + apply migrations
+uv run botpen serve                # bring the Hub container up (runs `hub serve` inside; leave running)
+uv run botpen scaffold             # provision agent container(s) - interactive, or -n/--stack
+uv run botpen start -n 3 --stack haiku,opus,sonnet   # db + Hub + scaffold N agents, in one shot
+uv run botpen permissions list     # operator audit of the permission log
+uv run botpen clean                # remove containers/images/volume/playgrounds (--db also wipes the DB)
 ```
 
-`./manage.py …` and `uv run manage.py …` are equivalent (the shebang routes through uv). Operators
-use this host CLI; agents inside containers use `coordinate` instead.
+`./botpen …` and `uv run botpen …` are equivalent (the shebang routes through uv). Operators use this
+host CLI; inside the Hub container the command is `hub`, and agents inside their own containers use
+`coordinate`.
 
 ## Git workflow
 
@@ -74,7 +77,7 @@ use this host CLI; agents inside containers use `coordinate` instead.
   found an unfixable issue - review, recommit, push again. `.githooks/pre-commit` auto-formats
   staged Python. Hooks are live via `core.hooksPath=.githooks`.
 - **uv only** - `uv add` / `uv sync` / `uv run`, never `pip` in committed code.
-- Commit only when asked.
+- Commit only when asked; end commit messages with the `Co-Authored-By` trailer.
 
 ## Schema & migrations (HARD constraint)
 

@@ -3,6 +3,44 @@
 Notable changes per release. Format loosely follows [Keep a Changelog](https://keepachangelog.com/);
 the version tracks `version` in `pyproject.toml`.
 
+## [Unreleased]
+
+CLI re-architecture into three context-scoped commands, a multi-bot `scaffold`, and pyrefly dropped.
+
+### Changed
+
+- **Three commands, one per environment** (replaces the single `manage.py`): `botpen` (host
+  operator: `start` / `scaffold` / `serve` / `clean` / `db` / `permissions`), `hub` (inside the Hub
+  container: the `serve` daemon + `permissions` / `workspace` / `reap` for `/shared`), and
+  `coordinate` (unchanged, agent-side). Context is implied by which command exists, so the
+  `running_in_hub` / `BOTPEN_IN_HUB` / `exec_in_hub` env dispatch is gone. Entry points: a repo-root
+  `./botpen` shebang plus `botpen` / `hub` console scripts; `manage.py` and the `playground` script
+  are removed.
+- **`scaffold` provisions one *or many* bots**, entirely host-side: interactive (ask N, per-bot
+  config, cuttable) or non-interactive `-n` + `--stack` (per-bot specs; the K-vs-N mapping from the
+  old `playground start` folds in here). It delegates `/shared` setup to the `hub` command (a
+  throwaway Hub container); slugs are random readable words (`agent-brave-otter`); one terminal opens
+  per bot (`BOTPEN_TERMINAL`, `--no-attach` to skip).
+- **`start`** is now a thin wrapper: `db setup` -> bring the Hub up (unless `--no-serve`) -> scaffold.
+- **`db`** group: `setup` / `reset` / `teardown` (was `setup [--reset]`).
+- **`clean`** replaces the old `teardown` command (folders / db / docker).
+- **Shared-volume ACLs** are applied by the `hub` command (in-process in the daemon, or a throwaway
+  Hub container), replacing the standalone ACL helper container.
+
+### Added
+
+- `BOTPEN_TERMINAL` setting - the macOS terminal app `scaffold` opens one window per bot in.
+
+### Removed
+
+- **pyrefly** - the dev dependency, every `# pyrefly: ignore` marker, and the doc references. The
+  gates are ruff + complexipy.
+
+### Notes
+
+- **Alembic is kept** - it gives idempotent, state-matched migrations and fits the SQLModel + Python
+  stack with no new tooling.
+
 ## [0.3.0]
 
 Per-agent Docker isolation, the Hub daemon, and the `coordinate` binary.

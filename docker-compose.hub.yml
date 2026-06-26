@@ -1,4 +1,5 @@
-# botpen Hub - the control-plane service. Brought up by `manage.py serve` (via ensure_hub).
+# botpen Hub - the control-plane service. Brought up by `botpen serve` (via ensure_hub); the
+# container's main process is `hub serve`.
 # Mirrors the signal-builder pattern: a shared external `botpen` bridge network that the Hub and
 # every agent container join, so they resolve each other by name (agents reach the Hub at hub:8787).
 name: botpen-hub
