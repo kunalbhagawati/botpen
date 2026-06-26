@@ -34,10 +34,38 @@ The short list (full version in [ARCHITECTURE.md § Where things go](ARCHITECTUR
 | Agent runtime skills (live in container) | `src/resources/skeleton/.claude/skills/<skill>/SKILL.md` |
 | Shared SQLite/engine wiring | `src/botpen/core/db.py` |
 
+## Coding conventions
+
+The full house style lives in [CODESTYLE.md](CODESTYLE.md) - read it before writing Python here.
+The load-bearing principles, in one place:
+
+- **Functions by default; a class only for owned live state.** The service layer is plain
+  functions `(s, …) -> data`; the `Hub` is the rare stateful class (it owns the live connections).
+- **Let exceptions bubble to a boundary.** `Hub._run` is the RPC boundary, Click is the CLI
+  boundary. Catch only to *handle* - never catch-log-reraise. `_run` already records every call
+  (success and error) to `request_log`, so services must not pre-log.
+- **Annotate signatures, not locals.** Modern syntax only (`X | None`, `list[T]`, PEP 695
+  generics); `except A, B:` without parens is intentional 3.14 syntax, not a bug. ruff `UP`
+  auto-fixes the rest.
+- **Structured JSON events, not logging.** `console` / `click.echo` on the host, `_emit` in
+  container daemons. No bare `print()` in `src/botpen/`.
+- **One unit, one responsibility; nested functions max depth 1** (the `work(sc)` closures are the
+  canonical case).
+
+See [CODESTYLE.md](CODESTYLE.md) for the rest (imports, datetimes, ORM access, type-hint detail,
+output sinks).
+
 ## Schema & migrations (HARD constraint)
 
 The schema is **Alembic-managed**. `core/models.py` is the model source; the migrations under
 `migrations/versions/` are the schema artifact that actually runs.
+
+> [!IMPORTANT]
+> **An AI agent MUST NOT create, edit, or delete a migration without explicit human approval.**
+> Surface the need - what changed in `core/models.py`, the migration you would generate - and
+> **stop**. Never write or apply a migration silently. The schema is the one place where a wrong
+> autonomous edit is expensive to unwind, and migrations are an immutable historical record once
+> committed.
 
 - **Never edit a migration that has been applied or committed.** Migrations are an immutable
   historical record. To change the schema, edit `core/models.py` and add a **new** migration -
@@ -96,11 +124,26 @@ Callers pass everything **after** `s`; the decorator supplies the session (and c
 
 ## Adding a Hub RPC method
 
-1. Add the method signature to `src/resources/hub.thrift` (the IDL is the contract).
-2. Implement it as an `async def` on the `Hub` class in `src/botpen/commands/serve.py`.
-3. Add the corresponding client command to `src/agent_cli/cli.py`.
+The IDL is the contract; both sides compile from it, and the method name is the join key. Every
+handler follows the same wrapper contract - keep to it.
+
+1. Add the method signature to `src/resources/hub.thrift` (**edit the IDL first** - it's the
+   contract).
+2. Implement it as an `async def` on the `Hub` class in `src/botpen/commands/serve.py`, following
+   the wrapper contract every other method uses:
+   - Define an inner `async def work(sc): …` (a depth-1 closure) holding the actual logic; `sc` is
+     the authenticated scaffold row.
+   - Return `await self._run("<method>", token, <payload-dict>, work)`. `_run` resolves the token
+     to a scaffold, records the call to `request_log` (success **and** error), and JSON-encodes the
+     result - so do **not** authenticate, log, or `json.dumps` by hand.
+   - **Never block the loop.** Every service / DB call goes through `await asyncio.to_thread(fn, …)`;
+     the services are sync and the Hub is the single async DB writer.
+3. Add the matching client command to `src/coordinate_cli/cli.py` (the agent-facing binary). It
+   calls the Hub via the Thrift client (`client.call`) - it never touches the repo or DB.
 4. The IDL method name must match the handler method name exactly (thriftpy2 looks them up by
-   name).
+   name); keep the client command aligned too.
+5. If the change alters the agent command surface, update the matching skill under
+   `src/resources/skeleton/.claude/skills/` in the **same** change (see [Agent skills](#agent-skills)).
 
 ## Agent skills
 

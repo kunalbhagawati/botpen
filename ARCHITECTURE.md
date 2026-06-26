@@ -197,22 +197,65 @@ that the agent may ignore. Read/write via `stack_get` / `stack_set` RPC.
 
 ## Layering
 
+Two things are layered here, and they are **abstraction layers, not directories** - several map to
+one file, and one file (`serve.py`) spans two:
+
+1. the **host control plane** - a strict vertical stack;
+2. the **host↔agent boundary** - the IDL seam that the Hub and the `coordinate` binary both compile from.
+
+### Host control-plane stack
+
 ```
 manage.py  →  config (settings)  +  botpen.cli
 botpen.cli   →  commands/  →  services/  →  core/
 commands/  →  also config (paths) + console
 ```
 
-Strict one-directional flow: commands depend on services, services depend on core; core depends
-on nothing in the package except `config`. No layer reaches back up.
+Strict one-directional flow: commands depend on services, services depend on core; core depends on
+nothing in the package except `config`. No layer reaches back up.
 
-- **commands/**: CLI surface - argument parsing and output formatting, no data logic.
-- **services/**: operations (write a message, grant a permission, create a scaffold). Each DB
-  read is wrapped by `@with_session`; each write by `@atomic` (which layers a commit on top of
-  `@with_session`). No Click, no rich.
-- **core/**: engine, session lifecycle, pragmas, and schema. `models.py` defines the tables;
-  Alembic migrations are the actual schema artifact applied by `setup_db()`. SQLite-specific
-  code isolated here for clean swap later.
+| Layer | Responsibility | Shape | Must NOT |
+|---|---|---|---|
+| **wiring** (`manage.py`, `cli.py`) | put repo root on `sys.path`, mount Click groups | composition only | hold logic |
+| **commands/** | parse args, format output (`console` / `click.echo(json)`) | thin Click commands | touch the DB or hold data logic |
+| **services/** | the operations - write a message, grant a permission, mint a scaffold | plain functions `(s, …) -> data`; `@with_session` (read) / `@atomic` (write) | import Click, rich, or asyncio |
+| **core/** | engine, session decorators, pragmas, SQLModel models | the only SQLite-aware layer | depend on anything above `config` |
+
+### The host↔agent boundary
+
+The Hub is **an async shell over the service layer, not a fourth stack layer.** It adds three
+concerns the sync stack doesn't have - token **auth**, **request logging**, and **non-blocking
+offload** - and re-exposes services across the IDL.
+
+```mermaid
+flowchart LR
+    subgraph host["HOST control plane"]
+        cmd["commands/ (Click)"] --> svc["services/<br>@with_session / @atomic"]
+        svc --> core["core/<br>engine + SQLModel"]
+        core --> db[("messages.db")]
+        hub["<b>Hub</b> — serve.py<br>async shell:<br>auth + request_log (_run)<br>exception boundary"]
+        hub -->|"asyncio.to_thread"| svc
+    end
+    idl{{"hub.thrift<br>contract seam<br>method name = join key"}}
+    subgraph agent["CONTAINER (agent)"]
+        coord["coordinate_cli (Click)<br>client.call — no DB/repo"]
+        daem["daemons<br>relay · disk-monitor"]
+    end
+    coord -->|"Thrift RPC :8787"| idl
+    idl --> hub
+    hub -->|"WebSocket :8788 push"| daem
+```
+
+- **`Hub._run` is the seam's spine.** Each method wraps its logic in an inner `work(sc)` closure and
+  hands it to `_run`, which authenticates the token, calls services via `asyncio.to_thread` (services
+  stay sync), records the call to `request_log`, and JSON-encodes the result. `_run` is also the
+  **exception boundary**: errors from services bubble up to it, get logged, and re-raise - lower
+  layers never catch-to-log.
+- **`hub.thrift` is the contract seam.** Both the Hub (server) and `coordinate` (client) compile from
+  it; the method name is the join key. Changing the boundary means editing the IDL first.
+- **`coordinate_cli` mirrors `commands/` on the agent side** - same "parse args, render output" role,
+  but its backend is `client.call` (Thrift), not `services/`. No repo or DB access. Plus the
+  in-container daemons (relay, disk-monitor) that consume the push channel.
 
 ## Key decisions
 
