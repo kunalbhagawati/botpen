@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Pre-push: correctness gate. Ruff lint over the package + entrypoints. Format is
+# auto-fixed at commit time (see pre-commit); lint runs here so a deliverable never
+# reaches the remote with violations.
+#
+# Auto-fixes what it can, then stops the push: if ruff changed any file (or left an
+# unfixable violation), the push is aborted so whoever ran it reviews the result,
+# recommits, and pushes again. The fixes are never sneaked onto the remote behind
+# the commit that was actually pushed.
+#
+# Installed via: git config core.hooksPath .githooks
+set -euo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+
+TARGETS=(src config.py manage.py migrations)
+
+# Snapshot the unstaged diff of the lint targets so we can tell whether ruff's
+# --fix changed anything. Hashing the diff (not "is the tree dirty") means a
+# pre-existing dirty tree doesn't trip the check — only new changes from --fix do.
+before=$(git diff -- "${TARGETS[@]}" | git hash-object --stdin)
+
+echo "==> ruff check --fix (lint)"
+set +e
+uv run ruff check --fix "${TARGETS[@]}"
+fix_rc=$?
+set -e
+
+after=$(git diff -- "${TARGETS[@]}" | git hash-object --stdin)
+
+if [[ "$before" != "$after" ]]; then
+  echo "" >&2
+  echo "pre-push: ruff auto-fixed lint issues — push aborted." >&2
+  echo "          Review the changes, recommit, then push again." >&2
+  exit 1
+fi
+
+if (( fix_rc != 0 )); then
+  echo "" >&2
+  echo "pre-push: ruff found lint issues it can't auto-fix — push aborted." >&2
+  echo "          Fix them, recommit, then push again." >&2
+  exit 1
+fi
+
+echo "==> pre-push: all checks passed"
