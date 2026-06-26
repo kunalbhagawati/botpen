@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     SCAFFOLD_UID_BASE: int
     SCAFFOLD_GID_BASE: int
 
+    # macOS terminal app that `scaffold` opens one window per bot in (Terminal / iTerm), via osascript.
+    BOTPEN_TERMINAL: str
+
     # Teardown monitor: minutes after an agent's container stops before the Hub reaps its
     # container / image / private volume / playground folder.
     SCAFFOLD_TEARDOWN_AFTER_MINS: int

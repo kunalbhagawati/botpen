@@ -54,8 +54,22 @@ def build_and_up(playground: Path) -> None:
 
 
 def attach(container_name: str) -> None:
-    """Drop the operator into the container's shell (interactive)."""
+    """Drop the operator into the container's shell (interactive, current terminal)."""
     subprocess.run(["docker", "exec", "-it", container_name, "bash"])
+
+
+def open_terminal(container_name: str) -> None:
+    """Open a NEW macOS terminal window attached to the container (`docker exec -it … bash`).
+
+    Terminal app from ``settings.BOTPEN_TERMINAL`` (default "Terminal"; "iTerm"/"iTerm2" supported),
+    driven via osascript. Best-effort - a failure here does not abort provisioning."""
+    inner = f"docker exec -it {container_name} bash"
+    app = settings.BOTPEN_TERMINAL
+    if app.lower() in ("iterm", "iterm2"):
+        script = f'tell application "iTerm" to create window with default profile command "{inner}"'
+    else:
+        script = f'tell application "{app}" to do script "{inner}"'
+    subprocess.run(["osascript", "-e", script], check=False)
 
 
 def teardown(components: list[str]) -> dict:

@@ -7,6 +7,8 @@ is CLI input coercion, validation, and stack resolution.
 from __future__ import annotations
 
 import json
+import secrets
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +22,75 @@ from ...stack_catalog import SCAFFOLD_STACK_CATALOG
 # ---------------------------------------------------------------------------
 
 MODEL_CHOICES: list[str] = ["opus", "sonnet", "haiku", "default"]
+
+
+# ---------------------------------------------------------------------------
+# Per-bot spec + readable slug
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class BotSpec:
+    """One bot's resolved provisioning config. `slug`/`max_disk` are None until defaults fill them;
+    `bot_auto_proceed`/`auto_start_bot` default off (a top-level flag can flip them)."""
+
+    model: str = "default"
+    stack_items: list[str] = field(default_factory=list)
+    slug: str | None = None
+    max_disk: int | None = None
+    bot_auto_proceed: bool = False
+    auto_start_bot: bool = False
+
+
+_SLUG_ADJECTIVES = (
+    "brave",
+    "calm",
+    "clever",
+    "bright",
+    "swift",
+    "quiet",
+    "bold",
+    "gentle",
+    "keen",
+    "lively",
+    "mellow",
+    "nimble",
+    "sunny",
+    "witty",
+    "amber",
+    "cosmic",
+    "crisp",
+    "dapper",
+    "eager",
+    "fuzzy",
+)
+_SLUG_NOUNS = (
+    "otter",
+    "finch",
+    "fox",
+    "heron",
+    "lynx",
+    "maple",
+    "comet",
+    "willow",
+    "raven",
+    "cedar",
+    "koi",
+    "wren",
+    "puma",
+    "ibis",
+    "moth",
+    "sparrow",
+    "badger",
+    "marten",
+    "newt",
+    "quail",
+)
+
+
+def random_slug() -> str:
+    """A readable two-word slug, e.g. 'brave-otter' - used as the container's `agent-<slug>`."""
+    return f"{secrets.choice(_SLUG_ADJECTIVES)}-{secrets.choice(_SLUG_NOUNS)}"
 
 
 # ---------------------------------------------------------------------------
@@ -86,25 +157,32 @@ def _parse_stack_config(raw_stack) -> list[str]:
     return names
 
 
-def _normalize_item(raw_item) -> tuple[str, list[str]]:
-    """Normalize a ScaffoldItemConfig to (model, stack_items).
+def _normalize_item(raw_item) -> BotSpec:
+    """Normalize one --stack config item to a BotSpec.
 
     Accepts:
-      - "haiku"                                         -> ("haiku", [])
-      - ["haiku", ["python", "redis"]]                  -> ("haiku", ["python", "redis"])
-      - {"model": "haiku", "stack": ["python"]}         -> ("haiku", ["python"])
+      - "haiku"                                  -> BotSpec(model="haiku")
+      - ["haiku", ["python", "redis"]]           -> BotSpec(model="haiku", stack_items=[...])
+      - {"model": "haiku", "stack": ["python"],  -> full per-bot spec (any field optional)
+         "slug": ..., "max_disk": ...,
+         "bot_auto_proceed": ..., "auto_start_bot": ...}
     """
     if isinstance(raw_item, str):
-        return raw_item, []
+        return BotSpec(model=raw_item)
     if isinstance(raw_item, list) and len(raw_item) >= 1 and isinstance(raw_item[0], str):
-        model = raw_item[0]
         stack_raw = raw_item[1] if len(raw_item) >= 2 else []
-        return model, _parse_stack_config(stack_raw)
+        return BotSpec(model=raw_item[0], stack_items=_parse_stack_config(stack_raw))
     if isinstance(raw_item, dict):
-        model = raw_item.get("model", "default")
         stack_raw = raw_item.get("stack", [])
-        return str(model), _parse_stack_config(stack_raw if isinstance(stack_raw, list) else [])
-    raise click.BadParameter(f"unrecognized scaffold config item: {raw_item!r}", param_hint="--scaffold-config")
+        return BotSpec(
+            model=str(raw_item.get("model", "default")),
+            stack_items=_parse_stack_config(stack_raw if isinstance(stack_raw, list) else []),
+            slug=raw_item.get("slug"),
+            max_disk=raw_item.get("max_disk"),
+            bot_auto_proceed=bool(raw_item.get("bot_auto_proceed", False)),
+            auto_start_bot=bool(raw_item.get("auto_start_bot", False)),
+        )
+    raise click.BadParameter(f"unrecognized --stack item: {raw_item!r}", param_hint="--stack")
 
 
 # ---------------------------------------------------------------------------
@@ -112,8 +190,8 @@ def _normalize_item(raw_item) -> tuple[str, list[str]]:
 # ---------------------------------------------------------------------------
 
 
-def parse_scaffold_config(raw: str) -> list[tuple[str, list[str]]]:
-    """Parse -c value into a list of (model, stack_items) tuples.
+def parse_scaffold_config(raw: str) -> list[BotSpec]:
+    """Parse a --stack value into a list of BotSpec.
 
     Resolution order:
       1. If raw names an existing file, read its contents.
@@ -147,7 +225,7 @@ def validate_model(model: str) -> None:
     if model not in MODEL_CHOICES:
         raise click.BadParameter(
             f"model {model!r} is not one of {MODEL_CHOICES}",
-            param_hint="--scaffold-config",
+            param_hint="--stack",
         )
 
 
@@ -168,7 +246,7 @@ def validate_and_group_stack(stack_items: list[str]) -> tuple[tuple[str, ...], t
             valid = list(all_keys.keys())
             raise click.BadParameter(
                 f"stack item {item!r} not found in catalog (valid: {valid})",
-                param_hint="--scaffold-config",
+                param_hint="--stack",
             )
         if cat == "language":
             languages.append(item)
