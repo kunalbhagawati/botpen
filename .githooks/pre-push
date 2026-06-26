@@ -43,4 +43,17 @@ if (( fix_rc != 0 )); then
   exit 1
 fi
 
+# Cognitive-complexity gate. --failed shows only over-threshold functions; --ignore-complexity
+# keeps the exit code 0 so the committed snapshot baseline (complexipy-snapshot.json) is what
+# gates: any function "not part of the snapshot" is new complexity since the baseline -> abort.
+echo "==> complexipy (cognitive-complexity gate)"
+complexipy_out=$(uv run complexipy --failed --ignore-complexity 2>&1)
+echo "$complexipy_out"
+if echo "$complexipy_out" | grep -q "not part of the snapshot"; then
+  echo "" >&2
+  echo "pre-push: complexipy found new complexity not in the snapshot baseline - push aborted." >&2
+  echo "          If intentional, run: uv run complexipy --snapshot-create, recommit, then push again." >&2
+  exit 1
+fi
+
 echo "==> pre-push: all checks passed"

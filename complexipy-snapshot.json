@@ -1,0 +1,12 @@
+[
+  {
+    "path": "src/botpen/commands/playground.py",
+    "file_name": "playground.py",
+    "functions": [
+      {
+        "name": "clean",
+        "complexity": 26
+      }
+    ]
+  }
+]

@@ -20,7 +20,11 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pyrefly>=1.0.0", "ruff>=0.15.17"]
+dev = [
+    "complexipy>=5.5.0",
+    "pyrefly>=1.0.0",
+    "ruff>=0.15.17",
+]
 
 [project.scripts]
 playground = "botpen._entrypoints:playground_main"
@@ -49,3 +53,8 @@ select = ["E", "F", "UP"]
 ignore = [
   "E501",
 ] # ruff format handles line length for code; SQL query strings are inherently long
+
+[tool.complexipy]
+# Cognitive-complexity gate. Snapshot baseline (complexipy-snapshot.json) is committed;
+# the pre-push hook fails on functions not in it. Regenerate with `uv run complexipy --snapshot-create`.
+paths = ["src", "config.py", "manage.py"]

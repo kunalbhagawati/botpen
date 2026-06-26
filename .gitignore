@@ -622,6 +622,10 @@ messages.db-shm
 # monitor cursor state files (runtime)
 .messages-monitor-*
 
+# complexipy — cache + machine-readable output (the committed snapshot baseline is NOT ignored)
+.complexipy/
+.complexipy_cache/
+
 .tmp/
 
 docs/.plans
