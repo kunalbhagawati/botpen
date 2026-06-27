@@ -23,11 +23,16 @@ The system in context - who uses botpen and what it touches:
 ```mermaid
 flowchart TD
     operator["Operator<br/>(human, on the host)"]
-    agent["Claude Code agent<br/>(one per sandbox)"]
     botpen(["botpen<br/>per-agent Docker sandboxes + one neutral Hub"])
     docker["Docker Engine"]
-    operator -->|"provision / serve / audit / clean — via botpen"| botpen
-    agent -->|"messages / thoughts / permissions — via coordinate"| botpen
+    subgraph agents["Agents (one per sandbox)"]
+        a1["Claude Code agent"]
+        a2["Claude Code agent"]
+        amore["..."]
+    end
+    operator -->|"provision / serve / audit / clean (botpen)"| botpen
+    a1 -->|"messages / thoughts / permissions (coordinate)"| botpen
+    a2 --> botpen
     botpen -->|builds and runs containers| docker
 ```
 
@@ -42,14 +47,21 @@ flowchart LR
     subgraph hubc["Hub container"]
         hub["hub serve<br/>Thrift :8787 · WebSocket :8788<br/>single DB writer · /shared ACLs · reaper"]
     end
-    subgraph agentc["Agent container (one per agent)"]
-        co["coordinate<br/>register · write · read · think · permissions"]
+    subgraph agents["Agent containers (one per agent)"]
+        subgraph a1["Agent container"]
+            co1["coordinate<br/>register · messages · think · permissions"]
+        end
+        subgraph a2["Agent container"]
+            co2["coordinate"]
+        end
+        amore["..."]
     end
     bp -->|docker compose up| hubc
     bp -->|"docker run --rm: hub workspace / permissions"| hub
     bp -.->|opens / reads| db
     hub -->|reads + writes| db
-    co -->|Thrift + WebSocket| hub
+    co1 -->|Thrift + WebSocket| hub
+    co2 --> hub
 ```
 
 **Why the split:**
@@ -100,7 +112,7 @@ playground agent, so they cannot bias one. See [README.md](README.md) for the fu
 .
 ├── botpen               # Host entry (shebang): puts the repo root on sys.path so `config` is
 │                        #   importable, then runs the root Click group (botpen.cli). Also a
-│                        #   `botpen` console script (botpen._entrypoints:botpen_main).
+│                        #   `botpen` console script (botpen._entrypoints:entrypoint).
 ├── config.py            # pydantic-settings Settings - ALL app config + computed paths.
 │                        #   The `settings` singleton; import as `from config import settings`.
 ├── .env / .env.local    # Config cascade (.env = committed base; .env.local = gitignored overrides)
@@ -110,11 +122,11 @@ playground agent, so they cannot bias one. See [README.md](README.md) for the fu
 └── src/
     ├── botpen/          # Host + Hub-container package
     │   ├── cli.py       #   Root `botpen` Click group; mounts start/scaffold/serve/clean/db/permissions
-    │   ├── _entrypoints.py #  Console-script entry (botpen_main) - sys.path bootstrap
+    │   ├── _entrypoints.py #  Console-script entry (entrypoint) - sys.path bootstrap
     │   ├── commands/    #   Host command modules: db / serve / scaffold / start / clean / permissions
     │   │   └── lib/     #     CLI helpers: render.py (rich console/box) + utils.py (parse/validate/BotSpec)
     │   ├── hub/         #   The `hub` command - runs INSIDE the Hub container only
-    │   │   ├── cli.py   #     `hub` Click group: serve / permissions / workspace / reap (+ hub_main)
+    │   │   ├── cli.py   #     `hub` Click group: serve / permissions / workspace / reap (+ entrypoint)
     │   │   ├── daemon.py #    The Hub daemon (Thrift + WebSocket), run by `hub serve`
     │   │   └── shared.py #    /shared maintenance: workspace create, ACL grant/revoke, reap (config-free)
     │   ├── services/    #   Operations layer - one module per concern

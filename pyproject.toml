@@ -26,8 +26,8 @@ dev = [
 ]
 
 [project.scripts]
-botpen = "botpen._entrypoints:botpen_main"   # host operator CLI
-hub = "botpen.hub:hub_main"                  # runs INSIDE the Hub container only
+botpen = "botpen._entrypoints:entrypoint"   # host operator CLI
+hub = "botpen.hub:entrypoint"               # runs INSIDE the Hub container only
 
 [build-system]
 requires = ["uv_build>=0.11.15,<0.12.0"]

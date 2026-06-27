@@ -19,7 +19,7 @@ _ROOT = Path(__file__).resolve().parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from botpen._entrypoints import botpen_main  # noqa: E402 - repo root must be on sys.path first
+from botpen._entrypoints import entrypoint  # noqa: E402 - repo root must be on sys.path first
 
 if __name__ == "__main__":
-    botpen_main()
+    entrypoint()

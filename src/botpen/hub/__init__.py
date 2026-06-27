@@ -8,6 +8,6 @@ package - it invokes the `hub` binary in a throwaway container. See ARCHITECTURE
 
 from __future__ import annotations
 
-from .cli import hub_main
+from .cli import entrypoint
 
-__all__ = ["hub_main"]
+__all__ = ["entrypoint"]

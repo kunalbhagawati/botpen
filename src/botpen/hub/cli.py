@@ -87,9 +87,9 @@ def reap_cmd(after_mins: int | None) -> None:
     click.echo(json.dumps({"event": "reaped", "slugs": reaped}))
 
 
-def hub_main() -> None:
+def entrypoint() -> None:
     hub()
 
 
 if __name__ == "__main__":
-    hub_main()
+    entrypoint()

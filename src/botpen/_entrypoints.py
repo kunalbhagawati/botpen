@@ -23,5 +23,5 @@ from config import settings  # noqa: F401 - build the settings singleton up fron
 from botpen.cli import cli
 
 
-def botpen_main() -> None:
+def entrypoint() -> None:
     cli()
