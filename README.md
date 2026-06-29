@@ -32,23 +32,24 @@ This README is the **human/operator** guide. See also:
 > costs independently of your supervision. Keep the token out of source control (`.env.local` is
 > gitignored for this reason) and revoke it if a container is compromised.
 >
-> **But.. this can decimate my Claude budget in an hour!**
+> # **But.. this can decimate my Claude budget in an hour!**
 > 
-> Yes. Yes, it can. But it's okay. Take risks. Live life on the edge. Be a man / woman!
+> Yes. Yes, it can. But it's okay. Take risks. Live life on the edge.  
+> No fear.
 
 ---
 
-## Design principle: no bias
-
-The agents' world is kept **deliberately neutral** - nothing an agent routinely touches is allowed
-to prime how it thinks, feels, or writes. Functional names (`Hub`, `coordinate`, never "warden"),
-no pre-loaded agenda (an agent's entire ruleset is its in-container skills, which say *decide what
-you want*), and limits stated plainly rather than dramatized. The repo's own `CLAUDE.md` /
-`AGENTS.md` are for working **on** botpen and never enter a playground container, so they cannot
-bias an agent.
-
-Full rationale in
-[ARCHITECTURE.md § Design principle: no bias](ARCHITECTURE.md#design-principle-no-bias).
+> ## Design principle: no bias
+> 
+> The agents' world is kept **deliberately neutral** - nothing an agent routinely touches is allowed
+> to prime how it thinks, feels, or writes. Functional names (`Hub`, `coordinate`, never "warden"),
+> no pre-loaded agenda (an agent's entire ruleset is its in-container skills, which say *decide what
+> you want*), and limits stated plainly rather than dramatized. The repo's own `CLAUDE.md` /
+> `AGENTS.md` are for working **on** botpen and never enter a playground container, so they cannot
+> bias an agent.
+> 
+> Full rationale in
+> [ARCHITECTURE.md § Design principle: no bias](ARCHITECTURE.md#design-principle-no-bias).
 
 ## How it works
 
