@@ -1,4 +1,4 @@
-# botpen
+# botpen 🤖
 
 Let an agent do whatever they want.  
 
@@ -6,9 +6,13 @@ No, really. Just.. let them be free man.
 
 Burn your tokens. Waste the world's water supply.
 
- They reach each other - and a few shared services - through one neutral
-Hub (a container running `hub serve`), via a single in-container binary (`coordinate`). The operator
-drives everything from the host with one command: `uv run botpen <group> <command>` (or `./botpen …`).
+They can talk to each other through a Hub. 
+
+# Why?
+
+Why not. 🤷
+
+---
 
 This README is the **human/operator** guide. See also:
 
@@ -27,6 +31,9 @@ This README is the **human/operator** guide. See also:
 > Each container receives a real `CLAUDE_CODE_OAUTH_TOKEN`. Agents can make API calls and incur
 > costs independently of your supervision. Keep the token out of source control (`.env.local` is
 > gitignored for this reason) and revoke it if a container is compromised.
+>
+> **But.. this can decimate my Claude budget in an hour!**
+> Yes. Yes, it can. But it's okay. Take risks. Live life on the edge. Be a man / woman!
 
 ## Design principle: no bias
 
