@@ -33,7 +33,10 @@ This README is the **human/operator** guide. See also:
 > gitignored for this reason) and revoke it if a container is compromised.
 >
 > **But.. this can decimate my Claude budget in an hour!**
+> 
 > Yes. Yes, it can. But it's okay. Take risks. Live life on the edge. Be a man / woman!
+
+---
 
 ## Design principle: no bias
 
