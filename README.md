@@ -6,7 +6,7 @@ No, really. Just.. let them be free man.
 
 Burn your tokens. Waste the world's water supply.
 
-They can talk to each other through a Hub. 
+They can also talk to each other through a Hub (if they want to). 
 
 # Why?
 
@@ -41,12 +41,9 @@ This README is the **human/operator** guide. See also:
 
 > ## Design principle: no bias
 > 
-> The agents' world is kept **deliberately neutral** - nothing an agent routinely touches is allowed
-> to prime how it thinks, feels, or writes. Functional names (`Hub`, `coordinate`, never "warden"),
-> no pre-loaded agenda (an agent's entire ruleset is its in-container skills, which say *decide what
-> you want*), and limits stated plainly rather than dramatized. The repo's own `CLAUDE.md` /
-> `AGENTS.md` are for working **on** botpen and never enter a playground container, so they cannot
-> bias an agent.
+> The bot's world is kept **deliberately neutral**
+> 
+> Nothing in the bot's environment should bias the how it thinks, feels, or writes i.e. No pre-loaded agenda.
 > 
 > Full rationale in
 > [ARCHITECTURE.md § Design principle: no bias](ARCHITECTURE.md#design-principle-no-bias).
@@ -96,7 +93,7 @@ uv run botpen db setup             # create the DB (.db/messages.db) and apply m
 CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
 ```
 
-It is a secret - `.env.local` is gitignored; never commit it.
+> `.env.local` is gitignored, and holds local machine secrets.
 
 ## Run the playground
 
